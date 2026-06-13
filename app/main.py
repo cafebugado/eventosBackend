@@ -7,7 +7,7 @@ from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.limiter import limiter
 from app.core.logging import setup_logging
-from app.routers import audit, communities, contributors, events, gallery, github, meta, tags, users
+from app.routers import audit, auth, communities, contributors, events, gallery, github, meta, tags, users
 
 setup_logging()
 
@@ -31,6 +31,7 @@ app.add_middleware(
 register_exception_handlers(app)
 
 app.include_router(meta.router)
+app.include_router(auth.router)
 app.include_router(events.router)
 app.include_router(tags.router)
 app.include_router(users.router)

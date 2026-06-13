@@ -21,6 +21,11 @@ class ConflictError(AppError):
         super().__init__(message, status.HTTP_409_CONFLICT)
 
 
+class UnauthorizedError(AppError):
+    def __init__(self, message: str = "Nao autorizado"):
+        super().__init__(message, status.HTTP_401_UNAUTHORIZED)
+
+
 class ForbiddenError(AppError):
     def __init__(self, message: str = "Acesso negado"):
         super().__init__(message, status.HTTP_403_FORBIDDEN)
