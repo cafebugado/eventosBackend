@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
+    @property
+    def supabase_jwks_url(self) -> str:
+        return f"{self.SUPABASE_URL}/auth/v1/.well-known/jwks.json"
+
 
 @lru_cache
 def get_settings() -> Settings:

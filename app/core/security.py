@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from functools import lru_cache
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -15,6 +16,11 @@ class CurrentUser:
     email: str | None = None
 
 
+@lru_cache
+def get_jwks_client() -> jwt.PyJWKClient:
+    return jwt.PyJWKClient(settings.supabase_jwks_url)
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> CurrentUser:
@@ -23,13 +29,14 @@ async def get_current_user(
 
     token = credentials.credentials
     try:
+        signing_key = get_jwks_client().get_signing_key_from_jwt(token)
         payload = jwt.decode(
             token,
-            settings.SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
+            signing_key.key,
+            algorithms=["ES256"],
             audience="authenticated",
         )
-    except jwt.PyJWTError as exc:
+    except (jwt.PyJWTError, jwt.PyJWKClientError) as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalido ou expirado") from exc
 
     user_id = payload.get("sub")

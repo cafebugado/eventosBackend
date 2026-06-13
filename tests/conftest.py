@@ -1,26 +1,35 @@
 import uuid
 from collections.abc import AsyncGenerator
+from unittest.mock import patch
 
 import jwt
 import pytest
 import pytest_asyncio
+from cryptography.hazmat.primitives.asymmetric import ec
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.core.config import settings
+from app.core import security
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models.user_role import UserRole
 from app.rbac.roles import Role
 
-TEST_JWT_SECRET = "test-secret"
+TEST_PRIVATE_KEY = ec.generate_private_key(ec.SECP256R1())
+TEST_PUBLIC_KEY = TEST_PRIVATE_KEY.public_key()
+
+
+class _FakeSigningKey:
+    key = TEST_PUBLIC_KEY
 
 
 @pytest.fixture(autouse=True)
-def _set_jwt_secret():
-    settings.SUPABASE_JWT_SECRET = TEST_JWT_SECRET
+def _mock_jwks_client():
+    with patch.object(security, "get_jwks_client") as mock_get_client:
+        mock_get_client.return_value.get_signing_key_from_jwt.return_value = _FakeSigningKey()
+        yield
 
 
 @pytest_asyncio.fixture
@@ -56,7 +65,7 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 def make_token(user_id: str | None = None, email: str = "user@example.com") -> tuple[str, str]:
     user_id = user_id or str(uuid.uuid4())
     payload = {"sub": user_id, "email": email, "aud": "authenticated"}
-    token = jwt.encode(payload, TEST_JWT_SECRET, algorithm="HS256")
+    token = jwt.encode(payload, TEST_PRIVATE_KEY, algorithm="ES256")
     return token, user_id
 
 
