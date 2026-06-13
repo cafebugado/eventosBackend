@@ -13,6 +13,10 @@ class UserRoleRead(BaseModel):
     role: Role
     created_at: datetime
     updated_at: datetime
+    nome: str | None = None
+    sobrenome: str | None = None
+    email: str | None = None
+    avatar_url: str | None = None
 
 
 class CurrentUserRole(BaseModel):

@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import bindparam, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user_profile import UserProfile
@@ -16,13 +16,30 @@ class UserRepository:
         result = await self.db.execute(select(UserRole).where(UserRole.user_id == user_id))
         return result.scalar_one_or_none()
 
-    async def list_roles(self) -> list[UserRole]:
-        result = await self.db.execute(select(UserRole))
-        return list(result.scalars().all())
+    async def list_roles(self) -> list[tuple[UserRole, UserProfile | None]]:
+        result = await self.db.execute(
+            select(UserRole, UserProfile).outerjoin(
+                UserProfile, UserRole.user_id == UserProfile.user_id
+            )
+        )
+        return list(result.all())
 
-    async def list_roles_by(self, roles: list[Role]) -> list[UserRole]:
-        result = await self.db.execute(select(UserRole).where(UserRole.role.in_(roles)))
-        return list(result.scalars().all())
+    async def list_roles_by(self, roles: list[Role]) -> list[tuple[UserRole, UserProfile | None]]:
+        result = await self.db.execute(
+            select(UserRole, UserProfile)
+            .outerjoin(UserProfile, UserRole.user_id == UserProfile.user_id)
+            .where(UserRole.role.in_(roles))
+        )
+        return list(result.all())
+
+    async def get_emails(self, user_ids: list[uuid.UUID]) -> dict[uuid.UUID, str | None]:
+        if not user_ids:
+            return {}
+        query = text("SELECT id, email FROM auth.users WHERE id IN :ids").bindparams(
+            bindparam("ids", expanding=True)
+        )
+        result = await self.db.execute(query, {"ids": user_ids})
+        return {row.id: row.email for row in result.all()}
 
     async def upsert_role(self, user_id: uuid.UUID, role: Role) -> UserRole:
         existing = await self.get_role(user_id)

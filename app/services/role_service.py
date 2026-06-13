@@ -19,12 +19,32 @@ class RoleService:
         role = await self.repo.get_role(user_id)
         return role.role if role else DEFAULT_ROLE
 
-    async def get_users_with_roles(self) -> list[UserRole]:
-        return await self.repo.list_roles()
+    async def get_users_with_roles(self) -> list[dict]:
+        rows = await self.repo.list_roles()
+        return await self._merge_with_email(rows)
 
-    async def get_users_with_roles_for_admin(self) -> list[UserRole]:
+    async def get_users_with_roles_for_admin(self) -> list[dict]:
         """Lista usuarios com papel 'moderador' (admins gerenciam apenas moderadores)."""
-        return await self.repo.list_roles_by([Role.MODERADOR])
+        rows = await self.repo.list_roles_by([Role.MODERADOR])
+        return await self._merge_with_email(rows)
+
+    async def _merge_with_email(
+        self, rows: list[tuple[UserRole, UserProfile | None]]
+    ) -> list[dict]:
+        emails = await self.repo.get_emails([role.user_id for role, _ in rows])
+        return [
+            {
+                "user_id": role.user_id,
+                "role": role.role,
+                "created_at": role.created_at,
+                "updated_at": role.updated_at,
+                "nome": profile.nome if profile else None,
+                "sobrenome": profile.sobrenome if profile else None,
+                "avatar_url": profile.avatar_url if profile else None,
+                "email": emails.get(role.user_id),
+            }
+            for role, profile in rows
+        ]
 
     async def assign_user_role(
         self, actor_role: Role, target_user_id: uuid.UUID, new_role: Role
