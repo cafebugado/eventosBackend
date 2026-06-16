@@ -42,10 +42,21 @@ class RegisterRequest(BaseModel):
         return v
 
 
+class AuthUser(BaseModel):
+    id: uuid.UUID
+    email: str | None = None
+    role: Role
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    refresh_token: str | None = None
+    token_type: str = "bearer"
+    expires_in: int | None = None
+    user: AuthUser
+
+
 class RegisterResponse(BaseModel):
-    """Retornado por POST /auth/register.
-    Quando confirmacao_pendente=True, o usuario precisa confirmar o email antes de logar.
-    access_token e user sao None ate a confirmacao."""
     confirmacao_pendente: bool = False
     mensagem: str | None = None
     access_token: str | None = None
@@ -62,17 +73,3 @@ class OAuthStartResponse(BaseModel):
 class OAuthCallbackRequest(BaseModel):
     code: str
     state: str | None = None
-
-
-class AuthUser(BaseModel):
-    id: uuid.UUID
-    email: str | None = None
-    role: Role
-
-
-class LoginResponse(BaseModel):
-    access_token: str
-    refresh_token: str | None = None
-    token_type: str = "bearer"
-    expires_in: int | None = None
-    user: AuthUser
