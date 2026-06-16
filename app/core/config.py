@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # Observability
     SENTRY_DSN: str = ""
 
+    # OAuth
+    OAUTH_REDIRECT_URL: str = ""
+
     # CORS
     CORS_ORIGINS: str = "http://localhost:5173"
 

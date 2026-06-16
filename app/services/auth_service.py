@@ -6,6 +6,7 @@ from supabase_auth.errors import AuthApiError
 
 from app.core.exceptions import ConflictError, UnauthorizedError, ValidationAppError
 from app.core.security import CurrentUser
+from app.core.config import settings
 from app.integrations.supabase_storage import get_storage_client
 from app.rbac.roles import Role
 from app.repositories.user_repository import UserRepository
@@ -117,10 +118,10 @@ class AuthService:
             raise ValidationAppError(f"Provider '{provider}' nao suportado. Use: github, google")
 
         client = get_storage_client()
-        result = await asyncio.to_thread(
-            client.auth.sign_in_with_oauth,
-            {"provider": provider},
-        )
+        payload: dict = {"provider": provider}
+        if settings.OAUTH_REDIRECT_URL:
+            payload["options"] = {"redirect_to": settings.OAUTH_REDIRECT_URL}
+        result = await asyncio.to_thread(client.auth.sign_in_with_oauth, payload)
         return result.url
 
     async def oauth_callback(self, data: OAuthCallbackRequest) -> LoginResponse:
