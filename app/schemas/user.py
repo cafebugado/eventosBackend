@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -37,7 +37,9 @@ class UserProfileBase(BaseModel):
     nome: str | None = None
     sobrenome: str | None = None
     github_username: str | None = None
+    linkedin_url: str | None = None
     avatar_url: str | None = None
+    data_nascimento: date | None = None
 
 
 class UserProfileUpsert(UserProfileBase):

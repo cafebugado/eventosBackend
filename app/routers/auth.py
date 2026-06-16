@@ -4,7 +4,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.limiter import limiter
 from app.core.security import CurrentUser, get_current_user
 from app.db.session import get_db
-from app.schemas.auth import AuthUser, LoginRequest, LoginResponse
+from app.schemas.auth import (
+    AuthUser,
+    LoginRequest,
+    LoginResponse,
+    OAuthCallbackRequest,
+    OAuthStartResponse,
+    RegisterRequest,
+    RegisterResponse,
+)
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -17,6 +25,30 @@ async def login(
 ) -> LoginResponse:
     service = AuthService(db)
     return await service.login(data.email, data.password)
+
+
+@router.post("/register", response_model=RegisterResponse, status_code=201)
+@limiter.limit("5/minute")
+async def register(
+    request: Request, data: RegisterRequest, db: AsyncSession = Depends(get_db)
+) -> RegisterResponse:
+    service = AuthService(db)
+    return await service.register(data)
+
+
+@router.get("/oauth/{provider}", response_model=OAuthStartResponse)
+async def oauth_start(provider: str, db: AsyncSession = Depends(get_db)) -> OAuthStartResponse:
+    service = AuthService(db)
+    url = await service.start_oauth(provider)
+    return OAuthStartResponse(url=url)
+
+
+@router.post("/oauth/callback", response_model=LoginResponse)
+async def oauth_callback(
+    data: OAuthCallbackRequest, db: AsyncSession = Depends(get_db)
+) -> LoginResponse:
+    service = AuthService(db)
+    return await service.oauth_callback(data)
 
 
 @router.get("/me", response_model=AuthUser)

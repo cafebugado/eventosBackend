@@ -1,6 +1,7 @@
 import uuid
+from datetime import date
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, model_validator
 
 from app.rbac.roles import Role
 
@@ -8,6 +9,59 @@ from app.rbac.roles import Role
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class RegisterRequest(BaseModel):
+    nome: str
+    sobrenome: str
+    email: str
+    senha: str
+    confirma_senha: str
+    data_nascimento: date
+    github: str
+    linkedin: str
+
+    @field_validator("email")
+    @classmethod
+    def email_valido(cls, v: str) -> str:
+        if "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("Email invalido")
+        return v.strip().lower()
+
+    @model_validator(mode="after")
+    def senhas_coincidem(self) -> "RegisterRequest":
+        if self.senha != self.confirma_senha:
+            raise ValueError("As senhas nao coincidem")
+        return self
+
+    @field_validator("senha")
+    @classmethod
+    def senha_minima(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError("A senha deve ter pelo menos 6 caracteres")
+        return v
+
+
+class RegisterResponse(BaseModel):
+    """Retornado por POST /auth/register.
+    Quando confirmacao_pendente=True, o usuario precisa confirmar o email antes de logar.
+    access_token e user sao None ate a confirmacao."""
+    confirmacao_pendente: bool = False
+    mensagem: str | None = None
+    access_token: str | None = None
+    refresh_token: str | None = None
+    token_type: str = "bearer"
+    expires_in: int | None = None
+    user: AuthUser | None = None
+
+
+class OAuthStartResponse(BaseModel):
+    url: str
+
+
+class OAuthCallbackRequest(BaseModel):
+    code: str
+    state: str | None = None
 
 
 class AuthUser(BaseModel):
