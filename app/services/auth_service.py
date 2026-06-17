@@ -6,13 +6,19 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase_auth.errors import AuthApiError
 
+from app.core.config import settings
 from app.core.exceptions import AppError, ConflictError, UnauthorizedError, ValidationAppError
 from app.core.security import CurrentUser
-from app.core.config import settings
 from app.integrations.supabase_storage import get_storage_client
 from app.rbac.roles import Role
 from app.repositories.user_repository import UserRepository
-from app.schemas.auth import AuthUser, LoginResponse, OAuthCallbackRequest, RegisterRequest, RegisterResponse
+from app.schemas.auth import (
+    AuthUser,
+    LoginResponse,
+    OAuthCallbackRequest,
+    RegisterRequest,
+    RegisterResponse,
+)
 from app.services.role_service import RoleService
 from app.utils.social import normalize_github, normalize_linkedin
 
@@ -110,7 +116,10 @@ class AuthService:
         if session is None:
             return RegisterResponse(
                 confirmacao_pendente=True,
-                mensagem="Conta criada com sucesso. Verifique seu email para confirmar o cadastro antes de fazer login.",
+                mensagem=(
+                    "Conta criada com sucesso. Verifique seu email para "
+                    "confirmar o cadastro antes de fazer login."
+                ),
             )
 
         return RegisterResponse(
