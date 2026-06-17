@@ -1,10 +1,12 @@
 import asyncio
+import logging
 import uuid
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase_auth.errors import AuthApiError
 
-from app.core.exceptions import ConflictError, UnauthorizedError, ValidationAppError
+from app.core.exceptions import AppError, ConflictError, UnauthorizedError, ValidationAppError
 from app.core.security import CurrentUser
 from app.core.config import settings
 from app.integrations.supabase_storage import get_storage_client
@@ -13,6 +15,8 @@ from app.repositories.user_repository import UserRepository
 from app.schemas.auth import AuthUser, LoginResponse, OAuthCallbackRequest, RegisterRequest, RegisterResponse
 from app.services.role_service import RoleService
 from app.utils.social import normalize_github, normalize_linkedin
+
+logger = logging.getLogger(__name__)
 
 _OAUTH_PROVIDERS = {"github", "google"}
 
@@ -77,17 +81,21 @@ class AuthService:
         user_id = uuid.UUID(sign_up_result.user.id)
 
         repo = UserRepository(self.db)
-        await repo.upsert_profile(
-            user_id,
-            {
-                "nome": data.nome,
-                "sobrenome": data.sobrenome,
-                "github_username": github_username,
-                "linkedin_url": linkedin_username,
-                "data_nascimento": data.data_nascimento,
-            },
-        )
-        await repo.upsert_role(user_id, Role.PARTICIPANTE)
+        try:
+            await repo.upsert_profile(
+                user_id,
+                {
+                    "nome": data.nome,
+                    "sobrenome": data.sobrenome,
+                    "github_username": github_username,
+                    "linkedin_url": linkedin_username,
+                    "data_nascimento": data.data_nascimento,
+                },
+            )
+            await repo.upsert_role(user_id, Role.PARTICIPANTE)
+        except SQLAlchemyError as exc:
+            logger.exception("Erro ao salvar perfil do usuario %s no banco", user_id)
+            raise AppError("Erro ao salvar perfil. Tente novamente mais tarde.") from exc
 
         # Tenta login imediato — funciona quando confirmacao de email esta desabilitada
         try:

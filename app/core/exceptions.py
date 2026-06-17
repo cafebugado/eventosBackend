@@ -1,5 +1,9 @@
+import logging
+
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+
+logger = logging.getLogger(__name__)
 
 
 class AppError(Exception):
@@ -40,3 +44,11 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+
+    @app.exception_handler(Exception)
+    async def generic_error_handler(request: Request, exc: Exception) -> JSONResponse:
+        logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": "Erro interno do servidor. Tente novamente."},
+        )
