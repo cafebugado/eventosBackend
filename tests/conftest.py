@@ -1,6 +1,6 @@
 import uuid
 from collections.abc import AsyncGenerator
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import jwt
 import pytest
@@ -16,6 +16,7 @@ from app.db.session import get_db
 from app.main import app
 from app.models.user_role import UserRole
 from app.rbac.roles import Role
+from app.repositories.user_repository import UserRepository
 
 TEST_PRIVATE_KEY = ec.generate_private_key(ec.SECP256R1())
 TEST_PUBLIC_KEY = TEST_PRIVATE_KEY.public_key()
@@ -29,6 +30,13 @@ class _FakeSigningKey:
 def _mock_jwks_client():
     with patch.object(security, "get_jwks_client") as mock_get_client:
         mock_get_client.return_value.get_signing_key_from_jwt.return_value = _FakeSigningKey()
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _mock_get_emails():
+    # auth.users existe apenas no Postgres do Supabase, nao no SQLite de teste.
+    with patch.object(UserRepository, "get_emails", new_callable=AsyncMock, return_value={}):
         yield
 
 

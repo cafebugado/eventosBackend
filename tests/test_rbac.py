@@ -12,11 +12,11 @@ def auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def test_default_role_is_moderador(client: AsyncClient):
+async def test_default_role_is_participante(client: AsyncClient):
     token, _ = make_token()
     response = await client.get("/users/me/role", headers=auth_headers(token))
     assert response.status_code == 200
-    assert response.json()["role"] == "moderador"
+    assert response.json()["role"] == "participante"
 
 
 async def test_moderador_cannot_manage_contributors(client: AsyncClient, db_session: AsyncSession):
