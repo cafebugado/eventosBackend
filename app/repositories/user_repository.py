@@ -22,7 +22,7 @@ class UserRepository:
                 UserProfile, UserRole.user_id == UserProfile.user_id
             )
         )
-        return list(result.all())
+        return [tuple(row) for row in result.all()]  # type: ignore[misc]
 
     async def list_roles_by(self, roles: list[Role]) -> list[tuple[UserRole, UserProfile | None]]:
         result = await self.db.execute(
@@ -30,7 +30,7 @@ class UserRepository:
             .outerjoin(UserProfile, UserRole.user_id == UserProfile.user_id)
             .where(UserRole.role.in_(roles))
         )
-        return list(result.all())
+        return [tuple(row) for row in result.all()]  # type: ignore[misc]
 
     async def get_emails(self, user_ids: list[uuid.UUID]) -> dict[uuid.UUID, str | None]:
         if not user_ids:

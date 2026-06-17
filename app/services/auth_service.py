@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase_auth.errors import AuthApiError
+from supabase_auth.types import CodeExchangeParams, SignInWithOAuthCredentials
 
 from app.core.config import settings
 from app.core.exceptions import AppError, ConflictError, UnauthorizedError, ValidationAppError
@@ -135,7 +136,7 @@ class AuthService:
             raise ValidationAppError(f"Provider '{provider}' nao suportado. Use: github, google")
 
         client = get_storage_client()
-        payload: dict = {"provider": provider}
+        payload: SignInWithOAuthCredentials = {"provider": provider}  # type: ignore[typeddict-item]
         if settings.OAUTH_REDIRECT_URL:
             payload["options"] = {"redirect_to": settings.OAUTH_REDIRECT_URL}
         result = await asyncio.to_thread(client.auth.sign_in_with_oauth, payload)
@@ -143,11 +144,13 @@ class AuthService:
 
     async def oauth_callback(self, data: OAuthCallbackRequest) -> LoginResponse:
         client = get_storage_client()
+        params: CodeExchangeParams = {
+            "auth_code": data.code,
+            "code_verifier": "",
+            "redirect_to": settings.OAUTH_REDIRECT_URL,
+        }
         try:
-            result = await asyncio.to_thread(
-                client.auth.exchange_code_for_session,
-                {"auth_code": data.code},
-            )
+            result = await asyncio.to_thread(client.auth.exchange_code_for_session, params)
         except AuthApiError as exc:
             raise UnauthorizedError("Codigo OAuth invalido ou expirado") from exc
 
