@@ -47,6 +47,31 @@ Copie `.env.example` para `.env` e preencha:
 - `GITHUB_TOKEN`, `GITHUB_REPO`, `GITHUB_REPO_BACKEND`: integracao com a API do GitHub.
 - `CORS_ORIGINS`: lista separada por virgula das origens do frontend.
 
+### Obtendo o `.env` rapidamente (devs do time)
+
+As credenciais reais de desenvolvimento ficam centralizadas no repositorio privado
+`cafebugado/backendeventos-env` (apenas arquivos `.env`, sem codigo). Pre-requisitos:
+acesso de leitura a esse repositorio (peca a quem administra o projeto) e estar logado
+no GitHub CLI (`gh auth login`).
+
+Com isso, basta rodar:
+
+```bash
+./scripts/fetch-env.ps1   # Windows
+./scripts/fetch-env.sh    # Linux/Mac
+```
+
+O script clona/atualiza o repo de env e copia `dev.env` para `.env` na raiz do projeto
+(perguntando antes de sobrescrever um `.env` local diferente). Use `-Up` (PowerShell) ou
+`--up` (Bash) para já subir `docker compose up --build` em seguida. Para atualizar depois
+de uma rotacao de credenciais, edite o arquivo `dev.env` no repo `backendeventos-env` e
+peca para o time rodar o script novamente.
+
+> Nota de seguranca: versionar segredos em texto puro, mesmo em repositorio privado, nao
+> e ideal a longo prazo. Mantenha o acesso restrito a devs ativos e rotacione as
+> credenciais (`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `GITHUB_TOKEN`) sempre
+> que alguem sair do time.
+
 ## Autenticacao e RBAC
 
 - Login/cadastro continuam via **Supabase Auth** no frontend. O backend apenas valida o
