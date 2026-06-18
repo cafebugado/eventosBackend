@@ -1,9 +1,11 @@
 import uuid
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, field_validator, model_validator
 
 from app.rbac.roles import Role
+from app.utils.validators import validar_idade_minima
 
 
 class LoginRequest(BaseModel):
@@ -41,11 +43,18 @@ class RegisterRequest(BaseModel):
             raise ValueError("A senha deve ter pelo menos 6 caracteres")
         return v
 
+    @field_validator("data_nascimento")
+    @classmethod
+    def idade_minima(cls, v: date) -> date:
+        validar_idade_minima(v)
+        return v
+
 
 class AuthUser(BaseModel):
     id: uuid.UUID
     email: str | None = None
     role: Role
+    provider: str | None = None
 
 
 class LoginResponse(BaseModel):
@@ -72,4 +81,27 @@ class OAuthStartResponse(BaseModel):
 
 class OAuthCallbackRequest(BaseModel):
     code: str
+    provider: Literal["github", "google"]
     state: str | None = None
+
+
+class UpdatePasswordRequest(BaseModel):
+    password: str
+
+    @field_validator("password")
+    @classmethod
+    def senha_minima(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError("A senha deve ter pelo menos 6 caracteres")
+        return v
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def email_valido(cls, v: str) -> str:
+        if "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("Email invalido")
+        return v.strip().lower()

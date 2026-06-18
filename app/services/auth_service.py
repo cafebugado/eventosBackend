@@ -46,14 +46,21 @@ class AuthService:
         if session is None or result.user is None:
             raise UnauthorizedError("Credenciais invalidas")
 
+        user_id = uuid.UUID(result.user.id)
         role_service = RoleService(self.db)
-        role = await role_service.get_user_role(uuid.UUID(result.user.id))
+        role = await role_service.get_user_role(user_id)
+        profile = await UserRepository(self.db).get_profile(user_id)
 
         return LoginResponse(
             access_token=session.access_token,
             refresh_token=session.refresh_token,
             expires_in=session.expires_in,
-            user=AuthUser(id=uuid.UUID(result.user.id), email=result.user.email, role=role),
+            user=AuthUser(
+                id=user_id,
+                email=result.user.email,
+                role=role,
+                provider=profile.provider if profile else "email",
+            ),
         )
 
     async def register(self, data: RegisterRequest) -> RegisterResponse:
@@ -97,6 +104,7 @@ class AuthService:
                     "github_username": github_username,
                     "linkedin_url": linkedin_username,
                     "data_nascimento": data.data_nascimento,
+                    "provider": "email",
                 },
             )
             await repo.upsert_role(user_id, Role.PARTICIPANTE)
@@ -128,7 +136,7 @@ class AuthService:
             access_token=session.access_token,
             refresh_token=session.refresh_token,
             expires_in=session.expires_in,
-            user=AuthUser(id=user_id, email=data.email, role=Role.PARTICIPANTE),
+            user=AuthUser(id=user_id, email=data.email, role=Role.PARTICIPANTE, provider="email"),
         )
 
     async def start_oauth(self, provider: str) -> str:
@@ -160,9 +168,13 @@ class AuthService:
 
         user_id = uuid.UUID(result.user.id)
         user_meta = result.user.user_metadata or {}
+        app_meta = result.user.app_metadata or {}
+        provider = app_meta.get("provider") or data.provider
 
         repo = UserRepository(self.db)
         existing_role = await repo.get_role(user_id)
+        profile_updates: dict = {"provider": provider}
+
         if existing_role is None:
             await repo.upsert_role(user_id, Role.PARTICIPANTE)
             role = Role.PARTICIPANTE
@@ -170,18 +182,16 @@ class AuthService:
             # Salva dados basicos do perfil vindos do provider social
             nome = user_meta.get("full_name", user_meta.get("name", ""))
             avatar_url = user_meta.get("avatar_url", user_meta.get("picture", ""))
-            if nome or avatar_url:
-                parts = nome.split(" ", 1) if nome else ["", ""]
-                await repo.upsert_profile(
-                    user_id,
-                    {
-                        "nome": parts[0],
-                        "sobrenome": parts[1] if len(parts) > 1 else None,
-                        "avatar_url": avatar_url or None,
-                    },
-                )
+            if nome:
+                parts = nome.split(" ", 1)
+                profile_updates["nome"] = parts[0]
+                profile_updates["sobrenome"] = parts[1] if len(parts) > 1 else None
+            if avatar_url:
+                profile_updates["avatar_url"] = avatar_url
         else:
             role = existing_role.role
+
+        await repo.upsert_profile(user_id, profile_updates)
 
         return LoginResponse(
             access_token=session.access_token,
@@ -191,10 +201,34 @@ class AuthService:
                 id=user_id,
                 email=result.user.email,
                 role=role,
+                provider=provider,
             ),
         )
 
     async def get_me(self, current_user: CurrentUser) -> AuthUser:
+        user_id = uuid.UUID(current_user.id)
         role_service = RoleService(self.db)
-        role = await role_service.get_user_role(uuid.UUID(current_user.id))
-        return AuthUser(id=uuid.UUID(current_user.id), email=current_user.email, role=role)
+        role = await role_service.get_user_role(user_id)
+        profile = await role_service.get_my_profile(user_id)
+        return AuthUser(
+            id=user_id,
+            email=current_user.email,
+            role=role,
+            provider=profile.provider if profile else None,
+        )
+
+    async def update_password(self, current_user: CurrentUser, new_password: str) -> None:
+        client = get_storage_client()
+        await asyncio.to_thread(
+            client.auth.admin.update_user_by_id,
+            current_user.id,
+            {"password": new_password},
+        )
+
+    async def request_password_reset(self, email: str) -> None:
+        client = get_storage_client()
+        try:
+            await asyncio.to_thread(client.auth.reset_password_for_email, email)
+        except AuthApiError:
+            # Nao revela se o email existe ou nao, para evitar enumeracao de contas
+            logger.warning("Falha ao solicitar reset de senha para %s", email)

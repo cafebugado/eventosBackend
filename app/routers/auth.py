@@ -12,6 +12,8 @@ from app.schemas.auth import (
     OAuthStartResponse,
     RegisterRequest,
     RegisterResponse,
+    ResetPasswordRequest,
+    UpdatePasswordRequest,
 )
 from app.services.auth_service import AuthService
 
@@ -58,3 +60,22 @@ async def get_me(
 ) -> AuthUser:
     service = AuthService(db)
     return await service.get_me(current_user)
+
+
+@router.post("/update-password", status_code=204)
+async def update_password(
+    data: UpdatePasswordRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    service = AuthService(db)
+    await service.update_password(current_user, data.password)
+
+
+@router.post("/reset-password", status_code=204)
+@limiter.limit("5/minute")
+async def reset_password(
+    request: Request, data: ResetPasswordRequest, db: AsyncSession = Depends(get_db)
+) -> None:
+    service = AuthService(db)
+    await service.request_password_reset(data.email)
