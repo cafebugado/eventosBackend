@@ -86,9 +86,10 @@ class OAuthCallbackRequest(BaseModel):
 
 
 class UpdatePasswordRequest(BaseModel):
-    password: str
+    senha_atual: str
+    nova_senha: str
 
-    @field_validator("password")
+    @field_validator("nova_senha")
     @classmethod
     def senha_minima(cls, v: str) -> str:
         if len(v) < 6:

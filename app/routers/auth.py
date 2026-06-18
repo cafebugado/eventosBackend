@@ -69,7 +69,7 @@ async def update_password(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     service = AuthService(db)
-    await service.update_password(current_user, data.password)
+    await service.update_password(current_user, data.senha_atual, data.nova_senha)
 
 
 @router.post("/reset-password", status_code=204)

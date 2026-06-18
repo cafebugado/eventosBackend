@@ -217,12 +217,25 @@ class AuthService:
             provider=profile.provider if profile else None,
         )
 
-    async def update_password(self, current_user: CurrentUser, new_password: str) -> None:
+    async def update_password(
+        self, current_user: CurrentUser, senha_atual: str, nova_senha: str
+    ) -> None:
+        if not current_user.email:
+            raise ValidationAppError("Usuario sem email cadastrado")
+
         client = get_storage_client()
+        try:
+            await asyncio.to_thread(
+                client.auth.sign_in_with_password,
+                {"email": current_user.email, "password": senha_atual},
+            )
+        except AuthApiError as exc:
+            raise UnauthorizedError("Senha atual incorreta") from exc
+
         await asyncio.to_thread(
             client.auth.admin.update_user_by_id,
             current_user.id,
-            {"password": new_password},
+            {"password": nova_senha},
         )
 
     async def request_password_reset(self, email: str) -> None:
