@@ -28,4 +28,6 @@ class AuditLogPage(BaseModel):
 
 class AuditUser(BaseModel):
     user_id: uuid.UUID
+    nome: str | None = None
+    sobrenome: str | None = None
     email: str | None = None

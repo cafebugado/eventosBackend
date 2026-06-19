@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_log import AuditLog
+from app.models.user_profile import UserProfile
 
 
 class AuditRepository:
@@ -46,8 +47,12 @@ class AuditRepository:
         result = await self.db.execute(stmt)
         return list(result.scalars().all()), total
 
-    async def list_distinct_users(self) -> list[uuid.UUID]:
+    async def list_distinct_users(self) -> list[tuple[uuid.UUID, UserProfile | None]]:
         result = await self.db.execute(
-            select(AuditLog.user_id).where(AuditLog.user_id.is_not(None)).distinct()
+            select(AuditLog.user_id, UserProfile)
+            .distinct(AuditLog.user_id)
+            .outerjoin(UserProfile, AuditLog.user_id == UserProfile.user_id)
+            .where(AuditLog.user_id.is_not(None))
+            .order_by(AuditLog.user_id)
         )
-        return [user_id for user_id in result.scalars().all() if user_id is not None]
+        return [(row[0], row[1]) for row in result.all()]

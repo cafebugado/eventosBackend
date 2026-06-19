@@ -49,5 +49,5 @@ async def list_audit_users(
     db: AsyncSession = Depends(get_db),
 ) -> list[AuditUser]:
     service = AuditService(db)
-    user_ids = await service.get_audit_users()
-    return [AuditUser(user_id=uid) for uid in user_ids]
+    users = await service.get_audit_users()
+    return [AuditUser(**u) for u in users]
