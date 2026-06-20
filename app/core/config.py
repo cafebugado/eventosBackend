@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     OAUTH_REDIRECT_URL: str = ""
 
     # CORS
-    CORS_ORIGINS: str = "http://localhost:5173"
+    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:4200"
 
     @property
     def cors_origins_list(self) -> list[str]:
