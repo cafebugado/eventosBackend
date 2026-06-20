@@ -1,9 +1,12 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, File, UploadFile
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.models.evento import Evento
 from app.rbac.permissions import require_permission
 from app.schemas.evento import (
     EventoCreate,
@@ -14,7 +17,19 @@ from app.schemas.evento import (
 )
 from app.services.evento_service import EventoService
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/events", tags=["events"])
+
+
+def _serialize_events(eventos: list[Evento]) -> list[EventoRead]:
+    result = []
+    for evento in eventos:
+        try:
+            result.append(EventoRead.model_validate(evento))
+        except ValidationError:
+            logger.warning("Evento com dados invalidos ignorado na listagem: id=%s", evento.id)
+    return result
 
 
 @router.get("", response_model=list[EventoRead])
@@ -24,21 +39,21 @@ async def list_events(
 ) -> list[EventoRead]:
     service = EventoService(db)
     eventos = await service.get_events()
-    return [EventoRead.model_validate(e) for e in eventos]
+    return _serialize_events(eventos)
 
 
 @router.get("/published", response_model=list[EventoRead])
 async def list_published_events(db: AsyncSession = Depends(get_db)) -> list[EventoRead]:
     service = EventoService(db)
     eventos = await service.get_published_events()
-    return [EventoRead.model_validate(e) for e in eventos]
+    return _serialize_events(eventos)
 
 
 @router.get("/upcoming", response_model=list[EventoRead])
 async def list_upcoming_events(limit: int = 3, db: AsyncSession = Depends(get_db)) -> list[EventoRead]:
     service = EventoService(db)
     eventos = await service.get_upcoming_events(limit)
-    return [EventoRead.model_validate(e) for e in eventos]
+    return _serialize_events(eventos)
 
 
 @router.get("/stats", response_model=EventoStats)
@@ -54,7 +69,7 @@ async def get_event_stats(
 async def list_events_by_period(periodo: str, db: AsyncSession = Depends(get_db)) -> list[EventoRead]:
     service = EventoService(db)
     eventos = await service.get_events_by_period(periodo)
-    return [EventoRead.model_validate(e) for e in eventos]
+    return _serialize_events(eventos)
 
 
 @router.get("/slug/{slug_or_id}", response_model=EventoRead)
