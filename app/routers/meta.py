@@ -2,7 +2,8 @@ from datetime import datetime
 from xml.sax.saxutils import escape
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
@@ -15,8 +16,12 @@ _BASE_URL = "https://agendas-eventos.vercel.app"
 
 
 @router.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+async def health(db: AsyncSession = Depends(get_db)) -> JSONResponse:
+    try:
+        await db.execute(text("SELECT 1"))
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "error", "database": "unreachable"})
+    return JSONResponse(content={"status": "ok", "database": "ok"})
 
 
 @router.get("/og")

@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.limiter import limiter
 from app.core.logging import setup_logging
+from app.core.telemetry import setup_telemetry
 from app.routers import audit, auth, communities, contributors, events, gallery, github, meta, tags, users
 
 setup_logging()
@@ -16,6 +17,8 @@ app = FastAPI(
     description="API REST para agenda de eventos, integrando Supabase (DB, Auth e Storage)",
     version="0.1.0",
 )
+
+setup_telemetry(app)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]

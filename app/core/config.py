@@ -22,6 +22,8 @@ class Settings(BaseSettings):
 
     # Observability
     SENTRY_DSN: str = ""
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
+    OTEL_EXPORTER_OTLP_HEADERS: str = ""
 
     # OAuth
     OAUTH_REDIRECT_URL: str = ""
