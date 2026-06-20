@@ -103,6 +103,21 @@ peca para o time rodar o script novamente.
   tabelas. Novas evolucoes de schema devem ser criadas como revisoes a partir da
   baseline.
 
+## Observabilidade
+
+A API tem 3 ferramentas open source de observabilidade, todas opcionais e ativadas
+apenas se a respectiva variavel de ambiente estiver preenchida:
+
+- **Sentry** — rastreamento de erros (stack trace, contexto da requisicao).
+- **structlog** — logs estruturados em JSON.
+- **OpenTelemetry → Grafana Cloud** — tracing distribuido e performance por endpoint.
+
+O endpoint `GET /health` tambem verifica a conexao com o banco antes de responder.
+
+Veja o passo a passo completo (como configurar, onde fica o codigo, como verificar
+que cada ferramenta esta funcionando) em
+[docs/OBSERVABILIDADE.md](docs/OBSERVABILIDADE.md).
+
 ## Rodando localmente
 
 ### Com Docker
