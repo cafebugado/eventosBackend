@@ -1,6 +1,7 @@
 import time
 
 import httpx
+from fastapi import HTTPException
 
 from app.core.config import settings
 from app.schemas.contribuinte import GitHubUserInfo
@@ -10,6 +11,17 @@ _GITHUB_API = "https://api.github.com"
 _CACHE_TTL_SECONDS = 5 * 60
 
 _cache: dict[str, tuple[float, object]] = {}
+
+
+async def _get(client: httpx.AsyncClient, url: str, **kwargs: object) -> httpx.Response:
+    response = await client.get(url, **kwargs)  # type: ignore[arg-type]
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(
+            status_code=502, detail=f"Falha ao consultar a API do GitHub: {exc.response.status_code}"
+        ) from exc
+    return response
 
 
 def _cache_get(key: str) -> object | None:
@@ -41,8 +53,7 @@ async def get_repo_stats(repo: str) -> RepoStats:
         return cached  # type: ignore[return-value]
 
     async with httpx.AsyncClient() as client:
-        response = await client.get(f"{_GITHUB_API}/repos/{repo}", headers=_headers())
-        response.raise_for_status()
+        response = await _get(client, f"{_GITHUB_API}/repos/{repo}", headers=_headers())
         data = response.json()
 
     stats = RepoStats(
@@ -62,10 +73,9 @@ async def get_recent_commits(repo: str, n: int = 5) -> list[CommitInfo]:
         return cached  # type: ignore[return-value]
 
     async with httpx.AsyncClient() as client:
-        response = await client.get(
-            f"{_GITHUB_API}/repos/{repo}/commits", headers=_headers(), params={"per_page": n}
+        response = await _get(
+            client, f"{_GITHUB_API}/repos/{repo}/commits", headers=_headers(), params={"per_page": n}
         )
-        response.raise_for_status()
         data = response.json()
 
     commits = [
@@ -90,12 +100,12 @@ async def get_recent_prs(repo: str, n: int = 5) -> list[PullRequestInfo]:
         return cached  # type: ignore[return-value]
 
     async with httpx.AsyncClient() as client:
-        response = await client.get(
+        response = await _get(
+            client,
             f"{_GITHUB_API}/repos/{repo}/pulls",
             headers=_headers(),
             params={"state": "all", "sort": "created", "direction": "desc", "per_page": n},
         )
-        response.raise_for_status()
         data = response.json()
 
     prs = [
@@ -121,10 +131,9 @@ async def get_top_contributors(repo: str, n: int = 5) -> list[ContributorInfo]:
         return cached  # type: ignore[return-value]
 
     async with httpx.AsyncClient() as client:
-        response = await client.get(
-            f"{_GITHUB_API}/repos/{repo}/contributors", headers=_headers(), params={"per_page": n}
+        response = await _get(
+            client, f"{_GITHUB_API}/repos/{repo}/contributors", headers=_headers(), params={"per_page": n}
         )
-        response.raise_for_status()
         data = response.json()
 
     contributors = [
@@ -142,8 +151,7 @@ async def get_top_contributors(repo: str, n: int = 5) -> list[ContributorInfo]:
 
 async def get_user_info(username: str) -> GitHubUserInfo:
     async with httpx.AsyncClient() as client:
-        response = await client.get(f"{_GITHUB_API}/users/{username}", headers=_headers())
-        response.raise_for_status()
+        response = await _get(client, f"{_GITHUB_API}/users/{username}", headers=_headers())
         data = response.json()
 
     return GitHubUserInfo(
