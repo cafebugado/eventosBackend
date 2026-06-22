@@ -62,6 +62,17 @@ class UserRepository:
         await self.db.commit()
         return True
 
+    async def get_role_and_profile(
+        self, user_id: uuid.UUID
+    ) -> tuple[UserRole | None, UserProfile | None]:
+        result = await self.db.execute(
+            select(UserRole, UserProfile)
+            .outerjoin(UserProfile, UserRole.user_id == UserProfile.user_id)
+            .where(UserRole.user_id == user_id)
+        )
+        row = result.first()
+        return (row[0], row[1]) if row else (None, None)
+
     async def get_profile(self, user_id: uuid.UUID) -> UserProfile | None:
         result = await self.db.execute(select(UserProfile).where(UserProfile.user_id == user_id))
         return result.scalar_one_or_none()

@@ -10,8 +10,9 @@ from supabase_auth.types import CodeExchangeParams, SignInWithOAuthCredentials
 from app.core.config import settings
 from app.core.exceptions import AppError, ConflictError, UnauthorizedError, ValidationAppError
 from app.core.security import CurrentUser
+from app.integrations.supabase_auth_client import sign_in_with_password
 from app.integrations.supabase_storage import get_storage_client
-from app.rbac.roles import Role
+from app.rbac.roles import DEFAULT_ROLE, Role
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import (
     AuthUser,
@@ -33,31 +34,22 @@ class AuthService:
         self.db = db
 
     async def login(self, email: str, password: str) -> LoginResponse:
-        client = get_storage_client()
-        try:
-            result = await asyncio.to_thread(
-                client.auth.sign_in_with_password,
-                {"email": email, "password": password},
-            )
-        except AuthApiError as exc:
-            raise UnauthorizedError("Credenciais invalidas") from exc
-
-        session = result.session
-        if session is None or result.user is None:
+        data = await sign_in_with_password(email, password)
+        user = data.get("user") or {}
+        if not data.get("access_token") or not user.get("id"):
             raise UnauthorizedError("Credenciais invalidas")
 
-        user_id = uuid.UUID(result.user.id)
-        role_service = RoleService(self.db)
-        role = await role_service.get_user_role(user_id)
-        profile = await UserRepository(self.db).get_profile(user_id)
+        user_id = uuid.UUID(user["id"])
+        role_row, profile = await UserRepository(self.db).get_role_and_profile(user_id)
+        role = role_row.role if role_row else DEFAULT_ROLE
 
         return LoginResponse(
-            access_token=session.access_token,
-            refresh_token=session.refresh_token,
-            expires_in=session.expires_in,
+            access_token=data["access_token"],
+            refresh_token=data["refresh_token"],
+            expires_in=data["expires_in"],
             user=AuthUser(
                 id=user_id,
-                email=result.user.email,
+                email=user.get("email"),
                 role=role,
                 provider=profile.provider if profile else "email",
             ),
