@@ -1,9 +1,11 @@
 import re
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
+
+from app.utils.event_date import parse_event_date
 
 Periodo = Literal["Matinal", "Diurno", "Vespertino", "Noturno"]
 EventoStatus = Literal["rascunho", "publicado", "arquivado"]
@@ -31,6 +33,9 @@ class EventoBase(BaseModel):
     def validate_data_evento(cls, value: str) -> str:
         if not _DATA_EVENTO_RE.match(value):
             raise ValueError("data_evento deve estar no formato DD/MM/YYYY")
+        event_date = parse_event_date(value)
+        if event_date is not None and event_date < date.today():
+            raise ValueError("data_evento não pode ser uma data no passado")
         return value
 
 
@@ -56,8 +61,13 @@ class EventoUpdate(BaseModel):
     @field_validator("data_evento")
     @classmethod
     def validate_data_evento(cls, value: str | None) -> str | None:
-        if value is not None and not _DATA_EVENTO_RE.match(value):
+        if value is None:
+            return value
+        if not _DATA_EVENTO_RE.match(value):
             raise ValueError("data_evento deve estar no formato DD/MM/YYYY")
+        event_date = parse_event_date(value)
+        if event_date is not None and event_date < date.today():
+            raise ValueError("data_evento não pode ser uma data no passado")
         return value
 
 
