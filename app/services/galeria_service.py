@@ -42,7 +42,7 @@ class GaleriaService:
         album = await self.get_album_by_id(album_id)
         for foto in album.fotos:
             if foto.storage_path:
-                remove_file(foto.storage_path)
+                await remove_file(foto.storage_path)
         await self.repo.delete_album(album)
 
     async def upload_foto(
@@ -58,7 +58,7 @@ class GaleriaService:
         await self.get_album_by_id(album_id)  # garante que o album existe
 
         prefix = f"galeria/{album_id}"
-        url = upload_file(prefix, filename, content, content_type)
+        url = await upload_file(prefix, filename, content, content_type)
         storage_path = _extract_path_from_prefix(url, prefix)
 
         foto = GaleriaFoto(
@@ -102,7 +102,7 @@ class GaleriaService:
         if foto is None:
             raise NotFoundError("Foto nao encontrada")
         if foto.storage_path:
-            remove_file(foto.storage_path)
+            await remove_file(foto.storage_path)
         await self.repo.delete_foto(foto)
 
 

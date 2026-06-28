@@ -10,14 +10,18 @@ class EventoRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def list_all(self) -> list[Evento]:
-        result = await self.db.execute(select(Evento).order_by(Evento.created_at.desc()))
+    async def list_all(self, limit: int | None = None, offset: int = 0) -> list[Evento]:
+        stmt = select(Evento).order_by(Evento.created_at.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit).offset(offset)
+        result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
-    async def list_by_status(self, status: str) -> list[Evento]:
-        result = await self.db.execute(
-            select(Evento).where(Evento.status == status).order_by(Evento.created_at.desc())
-        )
+    async def list_by_status(self, status: str, limit: int | None = None, offset: int = 0) -> list[Evento]:
+        stmt = select(Evento).where(Evento.status == status).order_by(Evento.created_at.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit).offset(offset)
+        result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
     async def get_by_id(self, evento_id: uuid.UUID) -> Evento | None:

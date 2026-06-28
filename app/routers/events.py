@@ -34,18 +34,22 @@ def _serialize_events(eventos: list[Evento]) -> list[EventoRead]:
 
 @router.get("", response_model=list[EventoRead])
 async def list_events(
+    limit: int | None = None,
+    offset: int = 0,
     _user=Depends(require_permission("canCreateEvents")),
     db: AsyncSession = Depends(get_db),
 ) -> list[EventoRead]:
     service = EventoService(db)
-    eventos = await service.get_events()
+    eventos = await service.get_events(limit=limit, offset=offset)
     return _serialize_events(eventos)
 
 
 @router.get("/published", response_model=list[EventoRead])
-async def list_published_events(db: AsyncSession = Depends(get_db)) -> list[EventoRead]:
+async def list_published_events(
+    limit: int | None = None, offset: int = 0, db: AsyncSession = Depends(get_db)
+) -> list[EventoRead]:
     service = EventoService(db)
-    eventos = await service.get_published_events()
+    eventos = await service.get_published_events(limit=limit, offset=offset)
     return _serialize_events(eventos)
 
 

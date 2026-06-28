@@ -1,3 +1,4 @@
+import asyncio
 import re
 import time
 import uuid
@@ -21,8 +22,7 @@ def _build_path(prefix: str, filename: str) -> str:
     return f"{prefix}/{unique}.{ext}"
 
 
-def upload_file(prefix: str, filename: str, content: bytes, content_type: str | None = None) -> str:
-    """Faz upload de um arquivo para o bucket configurado e retorna a URL publica."""
+def _upload_file_sync(prefix: str, filename: str, content: bytes, content_type: str | None = None) -> str:
     client = get_storage_client()
     path = _build_path(prefix, filename)
     bucket = client.storage.from_(settings.SUPABASE_STORAGE_BUCKET)
@@ -31,9 +31,18 @@ def upload_file(prefix: str, filename: str, content: bytes, content_type: str | 
     return bucket.get_public_url(path)
 
 
-def remove_file(path: str) -> None:
+async def upload_file(prefix: str, filename: str, content: bytes, content_type: str | None = None) -> str:
+    """Faz upload de um arquivo para o bucket configurado e retorna a URL publica."""
+    return await asyncio.to_thread(_upload_file_sync, prefix, filename, content, content_type)
+
+
+def _remove_file_sync(path: str) -> None:
     client = get_storage_client()
     client.storage.from_(settings.SUPABASE_STORAGE_BUCKET).remove([path])
+
+
+async def remove_file(path: str) -> None:
+    await asyncio.to_thread(_remove_file_sync, path)
 
 
 def extract_storage_path(public_url: str) -> str | None:
@@ -44,9 +53,9 @@ def extract_storage_path(public_url: str) -> str | None:
     return match.group(1)
 
 
-def remove_by_public_url(public_url: str) -> bool:
+async def remove_by_public_url(public_url: str) -> bool:
     path = extract_storage_path(public_url)
     if path is None:
         return False
-    remove_file(path)
+    await remove_file(path)
     return True

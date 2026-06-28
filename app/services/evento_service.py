@@ -19,11 +19,11 @@ class EventoService:
         self.repo = EventoRepository(db)
         self.tag_repo = TagRepository(db)
 
-    async def get_events(self) -> list[Evento]:
-        return await self.repo.list_all()
+    async def get_events(self, limit: int | None = None, offset: int = 0) -> list[Evento]:
+        return await self.repo.list_all(limit=limit, offset=offset)
 
-    async def get_published_events(self) -> list[Evento]:
-        return await self.repo.list_by_status("publicado")
+    async def get_published_events(self, limit: int | None = None, offset: int = 0) -> list[Evento]:
+        return await self.repo.list_by_status("publicado", limit=limit, offset=offset)
 
     async def get_event_by_id(self, event_id: uuid.UUID) -> Evento:
         evento = await self.repo.get_by_id(event_id)
@@ -152,14 +152,14 @@ class EventoService:
         self, event_id: uuid.UUID, filename: str, content: bytes, content_type: str | None
     ) -> Evento:
         evento = await self.get_event_by_id(event_id)
-        url = upload_file("eventos", filename, content, content_type)
+        url = await upload_file("eventos", filename, content, content_type)
         evento.imagem = url
         return await self.repo.update(evento)
 
     async def delete_event_image(self, event_id: uuid.UUID) -> Evento:
         evento = await self.get_event_by_id(event_id)
         if evento.imagem:
-            remove_by_public_url(evento.imagem)
+            await remove_by_public_url(evento.imagem)
             evento.imagem = None
             evento = await self.repo.update(evento)
         return evento
