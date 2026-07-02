@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.evento import Evento
@@ -30,6 +30,14 @@ class EventoRepository:
 
     async def get_by_slug(self, slug: str) -> Evento | None:
         result = await self.db.execute(select(Evento).where(Evento.slug == slug))
+        return result.scalar_one_or_none()
+
+    async def get_by_nome(self, nome: str, exclude_id: uuid.UUID | None = None) -> Evento | None:
+        normalized_name = nome.strip().lower()
+        stmt = select(Evento).where(func.lower(func.trim(Evento.nome)) == normalized_name).limit(1)
+        if exclude_id is not None:
+            stmt = stmt.where(Evento.id != exclude_id)
+        result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
     async def list_slugs_starting_with(self, prefix: str, exclude_id: uuid.UUID | None = None) -> set[str]:

@@ -42,7 +42,7 @@ async def test_create_event_generates_slug(client: AsyncClient, db_session: Asyn
     assert data["slug"] == "meetup-python"
 
 
-async def test_create_event_duplicate_name_gets_unique_slug(client: AsyncClient, db_session: AsyncSession):
+async def test_create_event_duplicate_name_returns_conflict(client: AsyncClient, db_session: AsyncSession):
     token, user_id = make_token()
     await set_user_role(db_session, user_id, Role.MODERADOR)
 
@@ -55,9 +55,46 @@ async def test_create_event_duplicate_name_gets_unique_slug(client: AsyncClient,
         "status": "publicado",
     }
     r1 = await client.post("/events", json=payload, headers=auth_headers(token))
-    r2 = await client.post("/events", json=payload, headers=auth_headers(token))
-    assert r1.json()["slug"] == "meetup-python"
-    assert r2.json()["slug"] == "meetup-python-2"
+    r2 = await client.post(
+        "/events",
+        json={**payload, "nome": " meetup python "},
+        headers=auth_headers(token),
+    )
+    assert r1.status_code == 201
+    assert r2.status_code == 409
+    assert r2.json()["detail"] == "Ja existe um evento cadastrado com este nome"
+
+
+async def test_update_event_duplicate_name_returns_conflict(client: AsyncClient, db_session: AsyncSession):
+    token, user_id = make_token()
+    await set_user_role(db_session, user_id, Role.MODERADOR)
+
+    base_payload = {
+        "data_evento": "25/12/2026",
+        "horario": "19:00",
+        "dia_semana": "Sexta",
+        "link": "https://example.com",
+        "status": "publicado",
+    }
+    await client.post(
+        "/events",
+        json={"nome": "Meetup Python", **base_payload},
+        headers=auth_headers(token),
+    )
+    other = await client.post(
+        "/events",
+        json={"nome": "Evento Frontend", **base_payload},
+        headers=auth_headers(token),
+    )
+
+    response = await client.put(
+        f"/events/{other.json()['id']}",
+        json={"nome": "Meetup Python"},
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Ja existe um evento cadastrado com este nome"
 
 
 async def test_get_published_events_is_public(client: AsyncClient, db_session: AsyncSession):

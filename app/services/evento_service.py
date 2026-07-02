@@ -3,7 +3,7 @@ from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.integrations.supabase_storage import remove_by_public_url, upload_file
 from app.models.evento import Evento
 from app.repositories.evento_repository import EventoRepository
@@ -51,7 +51,13 @@ class EventoService:
         used = await self.repo.list_slugs_starting_with(base, exclude_id=exclude_id)
         return resolve_unique_slug(base, used)
 
+    async def _ensure_unique_name(self, nome: str, exclude_id: uuid.UUID | None = None) -> None:
+        existing = await self.repo.get_by_nome(nome, exclude_id=exclude_id)
+        if existing is not None:
+            raise ConflictError("Ja existe um evento cadastrado com este nome")
+
     async def create_event(self, data: EventoCreate) -> Evento:
+        await self._ensure_unique_name(data.nome)
         slug = await self._resolve_slug(data.nome)
         evento = Evento(**data.model_dump(), slug=slug)
         return await self.repo.create(evento)
@@ -60,8 +66,10 @@ class EventoService:
         evento = await self.get_event_by_id(event_id)
         update_data = data.model_dump(exclude_unset=True)
 
-        if "nome" in update_data and update_data["nome"] != evento.nome:
-            update_data["slug"] = await self._resolve_slug(update_data["nome"], exclude_id=event_id)
+        if "nome" in update_data:
+            await self._ensure_unique_name(update_data["nome"], exclude_id=event_id)
+            if update_data["nome"] != evento.nome:
+                update_data["slug"] = await self._resolve_slug(update_data["nome"], exclude_id=event_id)
 
         for key, value in update_data.items():
             setattr(evento, key, value)
