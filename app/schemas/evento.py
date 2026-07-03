@@ -33,14 +33,17 @@ class EventoBase(BaseModel):
     def validate_data_evento(cls, value: str) -> str:
         if not _DATA_EVENTO_RE.match(value):
             raise ValueError("data_evento deve estar no formato DD/MM/YYYY")
-        event_date = parse_event_date(value)
-        if event_date is not None and event_date < date.today():
-            raise ValueError("data_evento não pode ser uma data no passado")
         return value
 
 
 class EventoCreate(EventoBase):
-    pass
+    @field_validator("data_evento")
+    @classmethod
+    def validate_data_evento_not_past(cls, value: str) -> str:
+        event_date = parse_event_date(value)
+        if event_date is not None and event_date < date.today():
+            raise ValueError("data_evento não pode ser uma data no passado")
+        return value
 
 
 class EventoUpdate(BaseModel):
