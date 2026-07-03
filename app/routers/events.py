@@ -1,7 +1,7 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,8 +10,10 @@ from app.models.evento import Evento
 from app.rbac.permissions import require_permission
 from app.schemas.evento import (
     EventoCreate,
+    EventoPage,
     EventoRead,
     EventoStats,
+    EventoStatus,
     EventoUpdate,
     EventoWithTags,
 )
@@ -32,14 +34,34 @@ def _serialize_events(eventos: list[Evento]) -> list[EventoRead]:
     return result
 
 
-@router.get("", response_model=list[EventoRead])
+@router.get("", response_model=EventoPage | list[EventoRead])
 async def list_events(
     limit: int | None = None,
     offset: int = 0,
+    page: int | None = Query(default=None, ge=1),
+    page_size: int | None = Query(default=None, ge=1, le=100),
+    status: EventoStatus | None = Query(default=None),
+    search: str | None = Query(default=None),
     _user=Depends(require_permission("canCreateEvents")),
     db: AsyncSession = Depends(get_db),
-) -> list[EventoRead]:
+) -> EventoPage | list[EventoRead]:
     service = EventoService(db)
+    if page is not None or page_size is not None or status is not None or search:
+        resolved_page = page or 1
+        resolved_page_size = page_size or limit or 20
+        eventos, total = await service.get_events_page(
+            page=resolved_page,
+            page_size=resolved_page_size,
+            status=status,
+            search=search,
+        )
+        return EventoPage(
+            items=_serialize_events(eventos),
+            total=total,
+            page=resolved_page,
+            page_size=resolved_page_size,
+        )
+
     eventos = await service.get_events(limit=limit, offset=offset)
     return _serialize_events(eventos)
 

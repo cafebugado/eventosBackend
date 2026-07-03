@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.evento import Evento
@@ -16,6 +16,42 @@ class EventoRepository:
             stmt = stmt.limit(limit).offset(offset)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def list_filtered(
+        self,
+        *,
+        status: str | None = None,
+        search: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[Evento], int]:
+        stmt = self._apply_filters(select(Evento), status=status, search=search)
+        count_stmt = self._apply_filters(
+            select(func.count()).select_from(Evento), status=status, search=search
+        )
+
+        total = (await self.db.execute(count_stmt)).scalar_one()
+
+        stmt = stmt.order_by(Evento.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all()), total
+
+    def _apply_filters(
+        self, stmt: Select[tuple[Evento]] | Select[tuple[int]], *, status: str | None, search: str | None
+    ):
+        if status is not None:
+            stmt = stmt.where(Evento.status == status)
+        if search:
+            term = search.strip().lower()
+            pattern = f"%{term}%"
+            stmt = stmt.where(
+                or_(
+                    func.lower(Evento.nome).like(pattern),
+                    func.lower(func.coalesce(Evento.descricao, "")).like(pattern),
+                    Evento.data_evento.like(f"%{term}%"),
+                )
+            )
+        return stmt
 
     async def list_by_status(self, status: str, limit: int | None = None, offset: int = 0) -> list[Evento]:
         stmt = select(Evento).where(Evento.status == status).order_by(Evento.created_at.desc())

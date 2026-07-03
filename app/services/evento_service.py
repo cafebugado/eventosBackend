@@ -8,7 +8,7 @@ from app.integrations.supabase_storage import remove_by_public_url, upload_file
 from app.models.evento import Evento
 from app.repositories.evento_repository import EventoRepository
 from app.repositories.tag_repository import TagRepository
-from app.schemas.evento import EventoCreate, EventoStats, EventoUpdate, EventoWithTags
+from app.schemas.evento import EventoCreate, EventoStats, EventoStatus, EventoUpdate, EventoWithTags
 from app.utils.event_date import get_iso_week, get_iso_year, parse_event_date
 from app.utils.slug import generate_slug, resolve_unique_slug
 
@@ -21,6 +21,16 @@ class EventoService:
 
     async def get_events(self, limit: int | None = None, offset: int = 0) -> list[Evento]:
         return await self.repo.list_all(limit=limit, offset=offset)
+
+    async def get_events_page(
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        status: EventoStatus | None = None,
+        search: str | None = None,
+    ) -> tuple[list[Evento], int]:
+        return await self.repo.list_filtered(page=page, page_size=page_size, status=status, search=search)
 
     async def get_published_events(self, limit: int | None = None, offset: int = 0) -> list[Evento]:
         return await self.repo.list_by_status("publicado", limit=limit, offset=offset)
@@ -138,10 +148,9 @@ class EventoService:
 
             same_week = False
             if current_event_date is not None:
-                same_week = (
-                    get_iso_week(event_date) == get_iso_week(current_event_date)
-                    and get_iso_year(event_date) == get_iso_year(current_event_date)
-                )
+                same_week = get_iso_week(event_date) == get_iso_week(current_event_date) and get_iso_year(
+                    event_date
+                ) == get_iso_year(current_event_date)
 
             days_away = (event_date - today).days
             return (not has_tag_match, not same_week, days_away)

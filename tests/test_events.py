@@ -116,6 +116,48 @@ async def test_get_published_events_is_public(client: AsyncClient, db_session: A
     assert len(response.json()) == 1
 
 
+async def test_list_events_supports_pagination_and_filters(client: AsyncClient, db_session: AsyncSession):
+    token, user_id = make_token()
+    await set_user_role(db_session, user_id, Role.MODERADOR)
+
+    base_payload = {
+        "data_evento": "25/12/2026",
+        "horario": "19:00",
+        "dia_semana": "Sexta",
+        "link": "https://example.com",
+    }
+    for index in range(3):
+        await client.post(
+            "/events",
+            json={
+                **base_payload,
+                "nome": f"Evento Publico {index}",
+                "descricao": "Evento para listagem",
+                "status": "publicado",
+            },
+            headers=auth_headers(token),
+        )
+    await client.post(
+        "/events",
+        json={**base_payload, "nome": "Evento Rascunho", "status": "rascunho"},
+        headers=auth_headers(token),
+    )
+
+    response = await client.get(
+        "/events",
+        params={"page": 1, "page_size": 2, "status": "publicado", "search": "Evento"},
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 3
+    assert data["page"] == 1
+    assert data["page_size"] == 2
+    assert len(data["items"]) == 2
+    assert all(item["status"] == "publicado" for item in data["items"])
+
+
 async def test_get_event_by_slug(client: AsyncClient, db_session: AsyncSession):
     token, user_id = make_token()
     await set_user_role(db_session, user_id, Role.MODERADOR)

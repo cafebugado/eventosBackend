@@ -80,6 +80,13 @@ class EventoRead(EventoBase):
     updated_at: datetime
 
 
+class EventoPage(BaseModel):
+    items: list[EventoRead]
+    total: int
+    page: int
+    page_size: int
+
+
 class EventoWithTags(EventoRead):
     tags: list["TagRead"] = []
 
