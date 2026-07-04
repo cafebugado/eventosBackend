@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,13 +22,14 @@ class EventoRepository:
         self,
         *,
         status: str | None = None,
+        date_filter: str | None = None,
         search: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[Evento], int]:
-        stmt = self._apply_filters(select(Evento), status=status, search=search)
+        stmt = self._apply_filters(select(Evento), status=status, date_filter=date_filter, search=search)
         count_stmt = self._apply_filters(
-            select(func.count()).select_from(Evento), status=status, search=search
+            select(func.count()).select_from(Evento), status=status, date_filter=date_filter, search=search
         )
 
         total = (await self.db.execute(count_stmt)).scalar_one()
@@ -37,10 +39,22 @@ class EventoRepository:
         return list(result.scalars().all()), total
 
     def _apply_filters(
-        self, stmt: Select[tuple[Evento]] | Select[tuple[int]], *, status: str | None, search: str | None
+        self,
+        stmt: Select[tuple[Evento]] | Select[tuple[int]],
+        *,
+        status: str | None,
+        date_filter: str | None,
+        search: str | None,
     ):
         if status is not None:
             stmt = stmt.where(Evento.status == status)
+        if date_filter is not None:
+            event_date_key = self._event_date_key()
+            today_key = date.today().isoformat()
+            if date_filter == "upcoming":
+                stmt = stmt.where(event_date_key >= today_key)
+            elif date_filter == "past":
+                stmt = stmt.where(event_date_key < today_key)
         if search:
             term = search.strip().lower()
             pattern = f"%{term}%"
@@ -52,6 +66,15 @@ class EventoRepository:
                 )
             )
         return stmt
+
+    def _event_date_key(self):
+        return (
+            func.substr(Evento.data_evento, 7, 4)
+            + "-"
+            + func.substr(Evento.data_evento, 4, 2)
+            + "-"
+            + func.substr(Evento.data_evento, 1, 2)
+        )
 
     async def list_by_status(self, status: str, limit: int | None = None, offset: int = 0) -> list[Evento]:
         stmt = select(Evento).where(Evento.status == status).order_by(Evento.created_at.desc())

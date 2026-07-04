@@ -10,6 +10,7 @@ from app.models.evento import Evento
 from app.rbac.permissions import require_permission
 from app.schemas.evento import (
     EventoCreate,
+    EventoDateFilter,
     EventoPage,
     EventoRead,
     EventoStats,
@@ -41,18 +42,20 @@ async def list_events(
     page: int | None = Query(default=None, ge=1),
     page_size: int | None = Query(default=None, ge=1, le=100),
     status: EventoStatus | None = Query(default=None),
+    date_filter: EventoDateFilter | None = Query(default=None),
     search: str | None = Query(default=None),
     _user=Depends(require_permission("canCreateEvents")),
     db: AsyncSession = Depends(get_db),
 ) -> EventoPage | list[EventoRead]:
     service = EventoService(db)
-    if page is not None or page_size is not None or status is not None or search:
+    if page is not None or page_size is not None or status is not None or date_filter is not None or search:
         resolved_page = page or 1
         resolved_page_size = page_size or limit or 20
         eventos, total = await service.get_events_page(
             page=resolved_page,
             page_size=resolved_page_size,
             status=status,
+            date_filter=date_filter,
             search=search,
         )
         return EventoPage(
