@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.models.evento import Evento
-from app.rbac.permissions import require_permission
+from app.rbac.permissions import get_current_user_role, require_permission
+from app.rbac.roles import Role
 from app.schemas.evento import (
     EventoCreate,
     EventoDateFilter,
@@ -46,10 +47,11 @@ async def list_events(
     search: str | None = Query(default=None),
     mine: bool = Query(default=False),
     current_user=Depends(require_permission("canCreateEvents")),
+    current_role: Role = Depends(get_current_user_role),
     db: AsyncSession = Depends(get_db),
 ) -> EventoPage | list[EventoRead]:
     service = EventoService(db)
-    created_by = uuid.UUID(current_user.id) if mine else None
+    created_by = uuid.UUID(current_user.id) if mine or current_role == Role.PARTICIPANTE else None
     if (
         page is not None
         or page_size is not None
@@ -75,7 +77,7 @@ async def list_events(
             page_size=resolved_page_size,
         )
 
-    eventos = await service.get_events(limit=limit, offset=offset)
+    eventos = await service.get_events(limit=limit, offset=offset, created_by=created_by)
     return _serialize_events(eventos)
 
 

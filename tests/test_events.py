@@ -199,6 +199,52 @@ async def test_list_events_filters_by_current_user(client: AsyncClient, db_sessi
     assert data["items"][0]["created_by"] == user_id
 
 
+async def test_list_events_participant_is_always_scoped_to_current_user(
+    client: AsyncClient, db_session: AsyncSession
+):
+    token, user_id = make_token(email="owner@example.com")
+    other_token, other_user_id = make_token(email="other@example.com")
+    await set_user_role(db_session, user_id, Role.PARTICIPANTE)
+    await set_user_role(db_session, other_user_id, Role.PARTICIPANTE)
+
+    base_payload = {
+        "data_evento": "25/12/2026",
+        "horario": "19:00",
+        "dia_semana": "Sexta",
+        "link": "https://example.com",
+        "status": "publicado",
+    }
+    await client.post(
+        "/events",
+        json={**base_payload, "nome": "Evento do Participante"},
+        headers=auth_headers(token),
+    )
+    await client.post(
+        "/events",
+        json={**base_payload, "nome": "Evento de Outra Conta"},
+        headers=auth_headers(other_token),
+    )
+
+    list_response = await client.get("/events", headers=auth_headers(token))
+    response = await client.get(
+        "/events",
+        params={"page": 1, "page_size": 20},
+        headers=auth_headers(token),
+    )
+
+    assert list_response.status_code == 200
+    list_data = list_response.json()
+    assert len(list_data) == 1
+    assert list_data[0]["nome"] == "Evento do Participante"
+    assert list_data[0]["created_by"] == user_id
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["items"][0]["nome"] == "Evento do Participante"
+    assert data["items"][0]["created_by"] == user_id
+
+
 async def test_list_events_pagination_includes_past_events(client: AsyncClient, db_session: AsyncSession):
     token, user_id = make_token()
     await set_user_role(db_session, user_id, Role.MODERADOR)

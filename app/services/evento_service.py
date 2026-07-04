@@ -26,8 +26,13 @@ class EventoService:
         self.repo = EventoRepository(db)
         self.tag_repo = TagRepository(db)
 
-    async def get_events(self, limit: int | None = None, offset: int = 0) -> list[Evento]:
-        return await self.repo.list_all(limit=limit, offset=offset)
+    async def get_events(
+        self,
+        limit: int | None = None,
+        offset: int = 0,
+        created_by: uuid.UUID | None = None,
+    ) -> list[Evento]:
+        return await self.repo.list_all(limit=limit, offset=offset, created_by=created_by)
 
     async def get_events_page(
         self,

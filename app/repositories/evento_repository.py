@@ -11,8 +11,15 @@ class EventoRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def list_all(self, limit: int | None = None, offset: int = 0) -> list[Evento]:
+    async def list_all(
+        self,
+        limit: int | None = None,
+        offset: int = 0,
+        created_by: uuid.UUID | None = None,
+    ) -> list[Evento]:
         stmt = select(Evento).order_by(Evento.created_at.desc())
+        if created_by is not None:
+            stmt = stmt.where(Evento.created_by == created_by)
         if limit is not None:
             stmt = stmt.limit(limit).offset(offset)
         result = await self.db.execute(stmt)
