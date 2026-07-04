@@ -80,6 +80,7 @@ class EventoRead(EventoBase):
 
     id: uuid.UUID
     slug: str
+    created_by: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
 

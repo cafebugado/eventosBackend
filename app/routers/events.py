@@ -44,11 +44,20 @@ async def list_events(
     status: EventoStatus | None = Query(default=None),
     date_filter: EventoDateFilter | None = Query(default=None),
     search: str | None = Query(default=None),
-    _user=Depends(require_permission("canCreateEvents")),
+    mine: bool = Query(default=False),
+    current_user=Depends(require_permission("canCreateEvents")),
     db: AsyncSession = Depends(get_db),
 ) -> EventoPage | list[EventoRead]:
     service = EventoService(db)
-    if page is not None or page_size is not None or status is not None or date_filter is not None or search:
+    created_by = uuid.UUID(current_user.id) if mine else None
+    if (
+        page is not None
+        or page_size is not None
+        or status is not None
+        or date_filter is not None
+        or search
+        or mine
+    ):
         resolved_page = page or 1
         resolved_page_size = page_size or limit or 20
         eventos, total = await service.get_events_page(
@@ -57,6 +66,7 @@ async def list_events(
             status=status,
             date_filter=date_filter,
             search=search,
+            created_by=created_by,
         )
         return EventoPage(
             items=_serialize_events(eventos),
@@ -130,11 +140,11 @@ async def get_recommended_events(
 @router.post("", response_model=EventoRead, status_code=201)
 async def create_event(
     data: EventoCreate,
-    _user=Depends(require_permission("canCreateEvents")),
+    current_user=Depends(require_permission("canCreateEvents")),
     db: AsyncSession = Depends(get_db),
 ) -> EventoRead:
     service = EventoService(db)
-    evento = await service.create_event(data)
+    evento = await service.create_event(data, created_by=uuid.UUID(current_user.id))
     return EventoRead.model_validate(evento)
 
 

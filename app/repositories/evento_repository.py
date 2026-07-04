@@ -24,12 +24,23 @@ class EventoRepository:
         status: str | None = None,
         date_filter: str | None = None,
         search: str | None = None,
+        created_by: uuid.UUID | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[Evento], int]:
-        stmt = self._apply_filters(select(Evento), status=status, date_filter=date_filter, search=search)
+        stmt = self._apply_filters(
+            select(Evento),
+            status=status,
+            date_filter=date_filter,
+            search=search,
+            created_by=created_by,
+        )
         count_stmt = self._apply_filters(
-            select(func.count()).select_from(Evento), status=status, date_filter=date_filter, search=search
+            select(func.count()).select_from(Evento),
+            status=status,
+            date_filter=date_filter,
+            search=search,
+            created_by=created_by,
         )
 
         total = (await self.db.execute(count_stmt)).scalar_one()
@@ -45,9 +56,12 @@ class EventoRepository:
         status: str | None,
         date_filter: str | None,
         search: str | None,
+        created_by: uuid.UUID | None,
     ):
         if status is not None:
             stmt = stmt.where(Evento.status == status)
+        if created_by is not None:
+            stmt = stmt.where(Evento.created_by == created_by)
         if date_filter is not None:
             event_date_key = self._event_date_key()
             today_key = date.today().isoformat()

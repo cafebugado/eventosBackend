@@ -37,6 +37,7 @@ class EventoService:
         status: EventoStatus | None = None,
         date_filter: EventoDateFilter | None = None,
         search: str | None = None,
+        created_by: uuid.UUID | None = None,
     ) -> tuple[list[Evento], int]:
         return await self.repo.list_filtered(
             page=page,
@@ -44,6 +45,7 @@ class EventoService:
             status=status,
             date_filter=date_filter,
             search=search,
+            created_by=created_by,
         )
 
     async def get_published_events(self, limit: int | None = None, offset: int = 0) -> list[Evento]:
@@ -80,10 +82,10 @@ class EventoService:
         if existing is not None:
             raise ConflictError("Ja existe um evento cadastrado com este nome")
 
-    async def create_event(self, data: EventoCreate) -> Evento:
+    async def create_event(self, data: EventoCreate, created_by: uuid.UUID | None = None) -> Evento:
         await self._ensure_unique_name(data.nome)
         slug = await self._resolve_slug(data.nome)
-        evento = Evento(**data.model_dump(), slug=slug)
+        evento = Evento(**data.model_dump(), slug=slug, created_by=created_by)
         return await self.repo.create(evento)
 
     async def update_event(self, event_id: uuid.UUID, data: EventoUpdate) -> Evento:
