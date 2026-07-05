@@ -3,7 +3,7 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.utils.event_date import parse_event_date
 
@@ -81,8 +81,21 @@ class EventoRead(EventoBase):
     id: uuid.UUID
     slug: str
     created_by: uuid.UUID | None = None
+    motivo_recusa: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class EventoRejectRequest(BaseModel):
+    motivo: str = Field(..., min_length=10, max_length=500)
+
+    @field_validator("motivo")
+    @classmethod
+    def validate_motivo(cls, value: str) -> str:
+        trimmed = value.strip()
+        if len(trimmed) < 10:
+            raise ValueError("motivo deve ter ao menos 10 caracteres")
+        return trimmed
 
 
 class EventoPage(BaseModel):

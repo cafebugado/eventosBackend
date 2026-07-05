@@ -40,6 +40,7 @@ class Evento(Base):
     cidade: Mapped[str | None] = mapped_column(Text, nullable=True)
     estado: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(Text, nullable=False, default="publicado", index=True)
+    motivo_recusa: Mapped[str | None] = mapped_column(Text, nullable=True)
     # FK logica para auth.users(id) (schema gerenciado pelo Supabase Auth, sem constraint local)
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

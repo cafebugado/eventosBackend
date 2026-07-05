@@ -15,6 +15,7 @@ from app.schemas.evento import (
     EventoDateFilter,
     EventoPage,
     EventoRead,
+    EventoRejectRequest,
     EventoStats,
     EventoStatus,
     EventoUpdate,
@@ -270,11 +271,12 @@ async def approve_event(
 @router.post("/{event_id}/reject", response_model=EventoRead)
 async def reject_event(
     event_id: uuid.UUID,
+    payload: EventoRejectRequest,
     _user=Depends(require_role(Role.SUPER_ADMIN, Role.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> EventoRead:
     service = EventoService(db)
-    evento = await service.reject_event(event_id)
+    evento = await service.reject_event(event_id, payload.motivo)
     return EventoRead.model_validate(evento)
 
 

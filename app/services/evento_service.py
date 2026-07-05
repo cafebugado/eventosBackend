@@ -168,11 +168,13 @@ class EventoService:
     async def approve_event(self, event_id: uuid.UUID) -> Evento:
         evento = await self.get_event_by_id(event_id)
         evento.status = "publicado"
+        evento.motivo_recusa = None
         return await self.repo.update(evento)
 
-    async def reject_event(self, event_id: uuid.UUID) -> Evento:
+    async def reject_event(self, event_id: uuid.UUID, motivo: str) -> Evento:
         evento = await self.get_event_by_id(event_id)
         evento.status = "recusado"
+        evento.motivo_recusa = motivo
         return await self.repo.update(evento)
 
     async def get_events_by_period(self, periodo: str) -> list[Evento]:
