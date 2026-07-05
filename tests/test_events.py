@@ -321,6 +321,131 @@ async def test_admin_can_reject_event_and_participant_still_sees_it(
     assert data["items"][0]["status"] == "recusado"
 
 
+async def test_participant_can_edit_own_published_event_and_it_returns_to_review(
+    client: AsyncClient, db_session: AsyncSession
+):
+    participant_token, participant_id = make_token(email="participante@example.com")
+    admin_token, admin_id = make_token(email="admin@example.com")
+    await set_user_role(db_session, participant_id, Role.PARTICIPANTE)
+    await set_user_role(db_session, admin_id, Role.ADMIN)
+
+    payload = {
+        "nome": "Evento do Participante",
+        "data_evento": "25/12/2026",
+        "horario": "19:00",
+        "dia_semana": "Sexta",
+        "link": "https://example.com",
+        "status": "publicado",
+    }
+    create_response = await client.post("/events", json=payload, headers=auth_headers(participant_token))
+    event_id = create_response.json()["id"]
+
+    approve_response = await client.post(
+        f"/events/{event_id}/approve", headers=auth_headers(admin_token)
+    )
+    assert approve_response.json()["status"] == "publicado"
+
+    update_response = await client.put(
+        f"/events/{event_id}",
+        json={"nome": "Evento do Participante Editado"},
+        headers=auth_headers(participant_token),
+    )
+
+    assert update_response.status_code == 200
+    updated = update_response.json()
+    assert updated["nome"] == "Evento do Participante Editado"
+    assert updated["status"] == "em_analise"
+
+
+async def test_participant_can_edit_own_rejected_event_without_forcing_status(
+    client: AsyncClient, db_session: AsyncSession
+):
+    participant_token, participant_id = make_token(email="participante@example.com")
+    admin_token, admin_id = make_token(email="admin@example.com")
+    await set_user_role(db_session, participant_id, Role.PARTICIPANTE)
+    await set_user_role(db_session, admin_id, Role.ADMIN)
+
+    payload = {
+        "nome": "Evento Recusado",
+        "data_evento": "25/12/2026",
+        "horario": "19:00",
+        "dia_semana": "Sexta",
+        "link": "https://example.com",
+        "status": "publicado",
+    }
+    create_response = await client.post("/events", json=payload, headers=auth_headers(participant_token))
+    event_id = create_response.json()["id"]
+
+    reject_response = await client.post(f"/events/{event_id}/reject", headers=auth_headers(admin_token))
+    assert reject_response.json()["status"] == "recusado"
+
+    update_response = await client.put(
+        f"/events/{event_id}",
+        json={"nome": "Evento Recusado Corrigido"},
+        headers=auth_headers(participant_token),
+    )
+
+    assert update_response.status_code == 200
+    updated = update_response.json()
+    assert updated["nome"] == "Evento Recusado Corrigido"
+    assert updated["status"] == "recusado"
+
+
+async def test_participant_cannot_edit_event_created_by_another_participant(
+    client: AsyncClient, db_session: AsyncSession
+):
+    owner_token, owner_id = make_token(email="owner@example.com")
+    other_token, other_id = make_token(email="other@example.com")
+    await set_user_role(db_session, owner_id, Role.PARTICIPANTE)
+    await set_user_role(db_session, other_id, Role.PARTICIPANTE)
+
+    payload = {
+        "nome": "Evento de Outra Conta",
+        "data_evento": "25/12/2026",
+        "horario": "19:00",
+        "dia_semana": "Sexta",
+        "link": "https://example.com",
+        "status": "publicado",
+    }
+    create_response = await client.post("/events", json=payload, headers=auth_headers(owner_token))
+    event_id = create_response.json()["id"]
+
+    update_response = await client.put(
+        f"/events/{event_id}",
+        json={"nome": "Tentativa de Edicao Alheia"},
+        headers=auth_headers(other_token),
+    )
+
+    assert update_response.status_code == 403
+
+
+async def test_participant_cannot_edit_event_waiting_for_review(
+    client: AsyncClient, db_session: AsyncSession
+):
+    participant_token, participant_id = make_token(email="participante@example.com")
+    await set_user_role(db_session, participant_id, Role.PARTICIPANTE)
+
+    payload = {
+        "nome": "Evento Em Analise",
+        "data_evento": "25/12/2026",
+        "horario": "19:00",
+        "dia_semana": "Sexta",
+        "link": "https://example.com",
+        "status": "publicado",
+    }
+    create_response = await client.post("/events", json=payload, headers=auth_headers(participant_token))
+    event_id = create_response.json()["id"]
+    assert create_response.json()["status"] == "em_analise"
+
+    update_response = await client.put(
+        f"/events/{event_id}",
+        json={"nome": "Evento Em Analise Editado"},
+        headers=auth_headers(participant_token),
+    )
+
+    assert update_response.status_code == 403
+
+
 async def test_moderator_cannot_publish_event_waiting_for_review(
     client: AsyncClient, db_session: AsyncSession
 ):

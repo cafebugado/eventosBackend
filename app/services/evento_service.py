@@ -124,6 +124,9 @@ class EventoService:
         update_data = data.model_dump(exclude_unset=True)
         self._ensure_can_update_event(evento, update_data, actor_id, actor_role)
 
+        if actor_role == Role.PARTICIPANTE and evento.status == "publicado":
+            update_data["status"] = "em_analise"
+
         if "nome" in update_data:
             await self._ensure_unique_name(update_data["nome"], exclude_id=event_id)
             if update_data["nome"] != evento.nome:
@@ -141,14 +144,14 @@ class EventoService:
         actor_id: uuid.UUID | None,
         actor_role: Role | None,
     ) -> None:
-        if actor_role == Role.MODERADOR and evento.created_by != actor_id:
-            raise ForbiddenError("Moderadores so podem editar eventos criados pela propria conta")
+        if actor_role in (Role.MODERADOR, Role.PARTICIPANTE) and evento.created_by != actor_id:
+            raise ForbiddenError("Voce so pode editar eventos criados pela propria conta")
 
-        new_status = update_data.get("status")
-        if new_status is None or actor_role in REVIEW_ROLES:
+        if actor_role in REVIEW_ROLES:
             return
 
-        if evento.status in REVIEW_STATUSES or new_status in REVIEW_STATUSES:
+        new_status = update_data.get("status")
+        if evento.status == "em_analise" or (new_status is not None and new_status in REVIEW_STATUSES):
             raise ForbiddenError("Eventos em revisao devem ser analisados por admin ou super_admin")
 
     async def delete_event(self, event_id: uuid.UUID) -> None:

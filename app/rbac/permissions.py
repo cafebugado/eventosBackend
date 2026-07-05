@@ -13,7 +13,7 @@ from app.rbac.roles import DEFAULT_ROLE, Role
 # Matriz de permissoes (espelha src/hooks/useUserRole.js)
 PERMISSIONS: dict[str, set[Role]] = {
     "canCreateEvents": {Role.SUPER_ADMIN, Role.ADMIN, Role.MODERADOR, Role.PARTICIPANTE},
-    "canEditEvents": {Role.SUPER_ADMIN, Role.ADMIN, Role.MODERADOR},
+    "canEditEvents": {Role.SUPER_ADMIN, Role.ADMIN, Role.MODERADOR, Role.PARTICIPANTE},
     "canDeleteEvents": {Role.SUPER_ADMIN, Role.ADMIN, Role.MODERADOR},
     "canPublishEvents": {Role.SUPER_ADMIN, Role.ADMIN, Role.MODERADOR},
     "canManageTags": {Role.SUPER_ADMIN, Role.ADMIN, Role.MODERADOR},
