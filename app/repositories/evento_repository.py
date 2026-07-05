@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.evento import Evento
@@ -16,8 +16,9 @@ class EventoRepository:
         limit: int | None = None,
         offset: int = 0,
         created_by: uuid.UUID | None = None,
+        pending_first: bool = False,
     ) -> list[Evento]:
-        stmt = select(Evento).order_by(Evento.created_at.desc())
+        stmt = select(Evento).order_by(*self._order_by(pending_first=pending_first))
         if created_by is not None:
             stmt = stmt.where(Evento.created_by == created_by)
         if limit is not None:
@@ -34,6 +35,7 @@ class EventoRepository:
         created_by: uuid.UUID | None = None,
         page: int = 1,
         page_size: int = 20,
+        pending_first: bool = False,
     ) -> tuple[list[Evento], int]:
         stmt = self._apply_filters(
             select(Evento),
@@ -52,7 +54,11 @@ class EventoRepository:
 
         total = (await self.db.execute(count_stmt)).scalar_one()
 
-        stmt = stmt.order_by(Evento.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+        stmt = (
+            stmt.order_by(*self._order_by(pending_first=pending_first))
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
         result = await self.db.execute(stmt)
         return list(result.scalars().all()), total
 
@@ -95,6 +101,15 @@ class EventoRepository:
             + func.substr(Evento.data_evento, 4, 2)
             + "-"
             + func.substr(Evento.data_evento, 1, 2)
+        )
+
+    def _order_by(self, *, pending_first: bool):
+        if not pending_first:
+            return (Evento.created_at.desc(),)
+
+        return (
+            case((Evento.status == "em_analise", 0), else_=1),
+            Evento.created_at.desc(),
         )
 
     async def list_by_status(self, status: str, limit: int | None = None, offset: int = 0) -> list[Evento]:

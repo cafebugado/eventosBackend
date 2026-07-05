@@ -1,11 +1,14 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import CurrentUser
 from app.db.session import get_db
-from app.rbac.permissions import require_permission
+from app.rbac.permissions import get_current_user_role, require_permission
+from app.rbac.roles import Role
 from app.schemas.tag import SetEventTagsRequest, TagCreate, TagRead, TagUpdate
+from app.services.evento_service import EventoService
 from app.services.tag_service import TagService
 
 router = APIRouter(tags=["tags"])
@@ -69,9 +72,15 @@ async def get_event_tags(event_id: uuid.UUID, db: AsyncSession = Depends(get_db)
 async def set_event_tags(
     event_id: uuid.UUID,
     data: SetEventTagsRequest,
-    _user=Depends(require_permission("canManageTags")),
+    current_user: CurrentUser = Depends(require_permission("canCreateEvents")),
+    current_role: Role = Depends(get_current_user_role),
     db: AsyncSession = Depends(get_db),
 ) -> list[TagRead]:
+    if current_role == Role.PARTICIPANTE:
+        evento = await EventoService(db).get_event_by_id(event_id)
+        if evento.created_by != uuid.UUID(current_user.id):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Permissao insuficiente para esta acao")
+
     service = TagService(db)
     tags = await service.set_event_tags(event_id, data.tag_ids)
     return [TagRead.model_validate(t) for t in tags]

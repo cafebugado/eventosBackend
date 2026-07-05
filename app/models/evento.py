@@ -20,7 +20,7 @@ class Evento(Base):
             name="ck_eventos_periodo",
         ),
         CheckConstraint(
-            "status IN ('rascunho','publicado','arquivado')",
+            "status IN ('rascunho','publicado','arquivado','em_analise','recusado')",
             name="ck_eventos_status",
         ),
     )

@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from app.utils.event_date import parse_event_date
 
 Periodo = Literal["Matinal", "Diurno", "Vespertino", "Noturno"]
-EventoStatus = Literal["rascunho", "publicado", "arquivado"]
+EventoStatus = Literal["rascunho", "publicado", "arquivado", "em_analise", "recusado"]
 EventoDateFilter = Literal["upcoming", "past"]
 
 _DATA_EVENTO_RE = re.compile(r"^\d{2}/\d{2}/\d{4}$")

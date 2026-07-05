@@ -3,9 +3,10 @@ from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.integrations.supabase_storage import remove_by_public_url, upload_file
 from app.models.evento import Evento
+from app.rbac.roles import Role
 from app.repositories.evento_repository import EventoRepository
 from app.repositories.tag_repository import TagRepository
 from app.schemas.evento import (
@@ -19,6 +20,9 @@ from app.schemas.evento import (
 from app.utils.event_date import get_iso_week, get_iso_year, parse_event_date
 from app.utils.slug import generate_slug, resolve_unique_slug
 
+REVIEW_ROLES = {Role.SUPER_ADMIN, Role.ADMIN}
+REVIEW_STATUSES = {"em_analise", "recusado"}
+
 
 class EventoService:
     def __init__(self, db: AsyncSession):
@@ -31,8 +35,14 @@ class EventoService:
         limit: int | None = None,
         offset: int = 0,
         created_by: uuid.UUID | None = None,
+        pending_first: bool = False,
     ) -> list[Evento]:
-        return await self.repo.list_all(limit=limit, offset=offset, created_by=created_by)
+        return await self.repo.list_all(
+            limit=limit,
+            offset=offset,
+            created_by=created_by,
+            pending_first=pending_first,
+        )
 
     async def get_events_page(
         self,
@@ -43,6 +53,7 @@ class EventoService:
         date_filter: EventoDateFilter | None = None,
         search: str | None = None,
         created_by: uuid.UUID | None = None,
+        pending_first: bool = False,
     ) -> tuple[list[Evento], int]:
         return await self.repo.list_filtered(
             page=page,
@@ -51,6 +62,7 @@ class EventoService:
             date_filter=date_filter,
             search=search,
             created_by=created_by,
+            pending_first=pending_first,
         )
 
     async def get_published_events(self, limit: int | None = None, offset: int = 0) -> list[Evento]:
@@ -87,15 +99,30 @@ class EventoService:
         if existing is not None:
             raise ConflictError("Ja existe um evento cadastrado com este nome")
 
-    async def create_event(self, data: EventoCreate, created_by: uuid.UUID | None = None) -> Evento:
+    async def create_event(
+        self,
+        data: EventoCreate,
+        created_by: uuid.UUID | None = None,
+        actor_role: Role | None = None,
+    ) -> Evento:
         await self._ensure_unique_name(data.nome)
         slug = await self._resolve_slug(data.nome)
-        evento = Evento(**data.model_dump(), slug=slug, created_by=created_by)
+        payload = data.model_dump()
+        if actor_role == Role.PARTICIPANTE:
+            payload["status"] = "em_analise"
+        evento = Evento(**payload, slug=slug, created_by=created_by)
         return await self.repo.create(evento)
 
-    async def update_event(self, event_id: uuid.UUID, data: EventoUpdate) -> Evento:
+    async def update_event(
+        self,
+        event_id: uuid.UUID,
+        data: EventoUpdate,
+        actor_id: uuid.UUID | None = None,
+        actor_role: Role | None = None,
+    ) -> Evento:
         evento = await self.get_event_by_id(event_id)
         update_data = data.model_dump(exclude_unset=True)
+        self._ensure_can_update_event(evento, update_data, actor_id, actor_role)
 
         if "nome" in update_data:
             await self._ensure_unique_name(update_data["nome"], exclude_id=event_id)
@@ -107,13 +134,42 @@ class EventoService:
 
         return await self.repo.update(evento)
 
+    def _ensure_can_update_event(
+        self,
+        evento: Evento,
+        update_data: dict,
+        actor_id: uuid.UUID | None,
+        actor_role: Role | None,
+    ) -> None:
+        if actor_role == Role.MODERADOR and evento.created_by != actor_id:
+            raise ForbiddenError("Moderadores so podem editar eventos criados pela propria conta")
+
+        new_status = update_data.get("status")
+        if new_status is None or actor_role in REVIEW_ROLES:
+            return
+
+        if evento.status in REVIEW_STATUSES or new_status in REVIEW_STATUSES:
+            raise ForbiddenError("Eventos em revisao devem ser analisados por admin ou super_admin")
+
     async def delete_event(self, event_id: uuid.UUID) -> None:
         evento = await self.get_event_by_id(event_id)
         await self.repo.delete(evento)
 
     async def publish_event(self, event_id: uuid.UUID) -> Evento:
         evento = await self.get_event_by_id(event_id)
+        if evento.status == "em_analise":
+            raise ForbiddenError("Eventos em analise devem ser aprovados pela revisao")
         evento.status = "publicado"
+        return await self.repo.update(evento)
+
+    async def approve_event(self, event_id: uuid.UUID) -> Evento:
+        evento = await self.get_event_by_id(event_id)
+        evento.status = "publicado"
+        return await self.repo.update(evento)
+
+    async def reject_event(self, event_id: uuid.UUID) -> Evento:
+        evento = await self.get_event_by_id(event_id)
+        evento.status = "recusado"
         return await self.repo.update(evento)
 
     async def get_events_by_period(self, periodo: str) -> list[Evento]:

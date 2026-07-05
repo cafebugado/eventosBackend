@@ -1,13 +1,14 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import CurrentUser, get_optional_user
 from app.db.session import get_db
 from app.models.evento import Evento
-from app.rbac.permissions import get_current_user_role, require_permission
+from app.rbac.permissions import get_current_user_role, get_user_role, require_permission, require_role
 from app.rbac.roles import Role
 from app.schemas.evento import (
     EventoCreate,
@@ -25,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/events", tags=["events"])
 
+REVIEW_ROLES = {Role.SUPER_ADMIN, Role.ADMIN}
+
 
 def _serialize_events(eventos: list[Evento]) -> list[EventoRead]:
     result = []
@@ -34,6 +37,48 @@ def _serialize_events(eventos: list[Evento]) -> list[EventoRead]:
         except ValidationError:
             logger.warning("Evento com dados invalidos ignorado na listagem: id=%s", evento.id)
     return result
+
+
+def _is_event_owner(evento: Evento, current_user: CurrentUser | None) -> bool:
+    return current_user is not None and evento.created_by == uuid.UUID(current_user.id)
+
+
+def _can_view_event(
+    evento: Evento,
+    current_user: CurrentUser | None,
+    current_role: Role | None,
+) -> bool:
+    if evento.status == "publicado":
+        return True
+
+    if current_role in REVIEW_ROLES:
+        return True
+
+    return _is_event_owner(evento, current_user)
+
+
+async def _get_optional_role(
+    current_user: CurrentUser | None,
+    db: AsyncSession,
+) -> Role | None:
+    if current_user is None:
+        return None
+    return await get_user_role(current_user.id, db)
+
+
+async def _ensure_participant_owns_event(
+    event_id: uuid.UUID,
+    current_user: CurrentUser,
+    current_role: Role,
+    db: AsyncSession,
+) -> None:
+    if current_role != Role.PARTICIPANTE:
+        return
+
+    service = EventoService(db)
+    evento = await service.get_event_by_id(event_id)
+    if not _is_event_owner(evento, current_user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Permissao insuficiente para esta acao")
 
 
 @router.get("", response_model=EventoPage | list[EventoRead])
@@ -52,6 +97,7 @@ async def list_events(
 ) -> EventoPage | list[EventoRead]:
     service = EventoService(db)
     created_by = uuid.UUID(current_user.id) if mine or current_role == Role.PARTICIPANTE else None
+    pending_first = current_role in REVIEW_ROLES and status is None
     if (
         page is not None
         or page_size is not None
@@ -69,6 +115,7 @@ async def list_events(
             date_filter=date_filter,
             search=search,
             created_by=created_by,
+            pending_first=pending_first,
         )
         return EventoPage(
             items=_serialize_events(eventos),
@@ -77,7 +124,12 @@ async def list_events(
             page_size=resolved_page_size,
         )
 
-    eventos = await service.get_events(limit=limit, offset=offset, created_by=created_by)
+    eventos = await service.get_events(
+        limit=limit,
+        offset=offset,
+        created_by=created_by,
+        pending_first=pending_first,
+    )
     return _serialize_events(eventos)
 
 
@@ -114,20 +166,30 @@ async def list_events_by_period(periodo: str, db: AsyncSession = Depends(get_db)
 
 
 @router.get("/slug/{slug_or_id}", response_model=EventoRead)
-async def get_event_by_slug_or_id(slug_or_id: str, db: AsyncSession = Depends(get_db)) -> EventoRead:
+async def get_event_by_slug_or_id(
+    slug_or_id: str,
+    current_user: CurrentUser | None = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_db),
+) -> EventoRead:
     service = EventoService(db)
     evento = await service.get_event_by_slug_or_id(slug_or_id)
+    current_role = await _get_optional_role(current_user, db)
+    if not _can_view_event(evento, current_user, current_role):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Evento nao encontrado")
     return EventoRead.model_validate(evento)
 
 
 @router.get("/{event_id}", response_model=EventoRead)
 async def get_event(
     event_id: uuid.UUID,
-    _user=Depends(require_permission("canCreateEvents")),
+    current_user=Depends(require_permission("canCreateEvents")),
+    current_role: Role = Depends(get_current_user_role),
     db: AsyncSession = Depends(get_db),
 ) -> EventoRead:
     service = EventoService(db)
     evento = await service.get_event_by_id(event_id)
+    if not _can_view_event(evento, current_user, current_role):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Evento nao encontrado")
     return EventoRead.model_validate(evento)
 
 
@@ -143,10 +205,15 @@ async def get_recommended_events(
 async def create_event(
     data: EventoCreate,
     current_user=Depends(require_permission("canCreateEvents")),
+    current_role: Role = Depends(get_current_user_role),
     db: AsyncSession = Depends(get_db),
 ) -> EventoRead:
     service = EventoService(db)
-    evento = await service.create_event(data, created_by=uuid.UUID(current_user.id))
+    evento = await service.create_event(
+        data,
+        created_by=uuid.UUID(current_user.id),
+        actor_role=current_role,
+    )
     return EventoRead.model_validate(evento)
 
 
@@ -154,11 +221,17 @@ async def create_event(
 async def update_event(
     event_id: uuid.UUID,
     data: EventoUpdate,
-    _user=Depends(require_permission("canEditEvents")),
+    current_user=Depends(require_permission("canEditEvents")),
+    current_role: Role = Depends(get_current_user_role),
     db: AsyncSession = Depends(get_db),
 ) -> EventoRead:
     service = EventoService(db)
-    evento = await service.update_event(event_id, data)
+    evento = await service.update_event(
+        event_id,
+        data,
+        actor_id=uuid.UUID(current_user.id),
+        actor_role=current_role,
+    )
     return EventoRead.model_validate(evento)
 
 
@@ -183,13 +256,37 @@ async def publish_event(
     return EventoRead.model_validate(evento)
 
 
+@router.post("/{event_id}/approve", response_model=EventoRead)
+async def approve_event(
+    event_id: uuid.UUID,
+    _user=Depends(require_role(Role.SUPER_ADMIN, Role.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> EventoRead:
+    service = EventoService(db)
+    evento = await service.approve_event(event_id)
+    return EventoRead.model_validate(evento)
+
+
+@router.post("/{event_id}/reject", response_model=EventoRead)
+async def reject_event(
+    event_id: uuid.UUID,
+    _user=Depends(require_role(Role.SUPER_ADMIN, Role.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> EventoRead:
+    service = EventoService(db)
+    evento = await service.reject_event(event_id)
+    return EventoRead.model_validate(evento)
+
+
 @router.post("/{event_id}/image", response_model=EventoRead)
 async def upload_event_image(
     event_id: uuid.UUID,
     file: UploadFile = File(...),
-    _user=Depends(require_permission("canUploadImages")),
+    current_user=Depends(require_permission("canUploadImages")),
+    current_role: Role = Depends(get_current_user_role),
     db: AsyncSession = Depends(get_db),
 ) -> EventoRead:
+    await _ensure_participant_owns_event(event_id, current_user, current_role, db)
     service = EventoService(db)
     content = await file.read()
     evento = await service.upload_event_image(event_id, file.filename or "imagem", content, file.content_type)
@@ -199,9 +296,11 @@ async def upload_event_image(
 @router.delete("/{event_id}/image", response_model=EventoRead)
 async def delete_event_image(
     event_id: uuid.UUID,
-    _user=Depends(require_permission("canUploadImages")),
+    current_user=Depends(require_permission("canUploadImages")),
+    current_role: Role = Depends(get_current_user_role),
     db: AsyncSession = Depends(get_db),
 ) -> EventoRead:
+    await _ensure_participant_owns_event(event_id, current_user, current_role, db)
     service = EventoService(db)
     evento = await service.delete_event_image(event_id)
     return EventoRead.model_validate(evento)

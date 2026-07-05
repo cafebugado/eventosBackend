@@ -245,6 +245,112 @@ async def test_list_events_participant_is_always_scoped_to_current_user(
     assert data["items"][0]["created_by"] == user_id
 
 
+async def test_participant_event_goes_to_review_and_can_be_approved(
+    client: AsyncClient, db_session: AsyncSession
+):
+    participant_token, participant_id = make_token(email="participante@example.com")
+    admin_token, admin_id = make_token(email="admin@example.com")
+    await set_user_role(db_session, participant_id, Role.PARTICIPANTE)
+    await set_user_role(db_session, admin_id, Role.ADMIN)
+
+    payload = {
+        "nome": "Evento para Revisao",
+        "data_evento": "25/12/2026",
+        "horario": "19:00",
+        "dia_semana": "Sexta",
+        "link": "https://example.com",
+        "status": "publicado",
+    }
+    create_response = await client.post("/events", json=payload, headers=auth_headers(participant_token))
+
+    assert create_response.status_code == 201
+    created = create_response.json()
+    assert created["status"] == "em_analise"
+    assert created["created_by"] == participant_id
+
+    public_response = await client.get("/events/slug/evento-para-revisao")
+    assert public_response.status_code == 404
+
+    owner_response = await client.get(
+        "/events/slug/evento-para-revisao", headers=auth_headers(participant_token)
+    )
+    assert owner_response.status_code == 200
+    assert owner_response.json()["status"] == "em_analise"
+
+    approve_response = await client.post(
+        f"/events/{created['id']}/approve", headers=auth_headers(admin_token)
+    )
+    assert approve_response.status_code == 200
+    assert approve_response.json()["status"] == "publicado"
+
+    published_response = await client.get("/events/published")
+    assert published_response.status_code == 200
+    assert published_response.json()[0]["nome"] == "Evento para Revisao"
+
+
+async def test_admin_can_reject_event_and_participant_still_sees_it(
+    client: AsyncClient, db_session: AsyncSession
+):
+    participant_token, participant_id = make_token(email="participante@example.com")
+    admin_token, admin_id = make_token(email="admin@example.com")
+    await set_user_role(db_session, participant_id, Role.PARTICIPANTE)
+    await set_user_role(db_session, admin_id, Role.ADMIN)
+
+    payload = {
+        "nome": "Evento Recusavel",
+        "data_evento": "25/12/2026",
+        "horario": "19:00",
+        "dia_semana": "Sexta",
+        "link": "https://example.com",
+        "status": "publicado",
+    }
+    create_response = await client.post("/events", json=payload, headers=auth_headers(participant_token))
+    event_id = create_response.json()["id"]
+
+    reject_response = await client.post(f"/events/{event_id}/reject", headers=auth_headers(admin_token))
+    assert reject_response.status_code == 200
+    assert reject_response.json()["status"] == "recusado"
+
+    list_response = await client.get(
+        "/events", params={"page": 1, "page_size": 20}, headers=auth_headers(participant_token)
+    )
+    assert list_response.status_code == 200
+    data = list_response.json()
+    assert data["total"] == 1
+    assert data["items"][0]["nome"] == "Evento Recusavel"
+    assert data["items"][0]["status"] == "recusado"
+
+
+async def test_moderator_cannot_publish_event_waiting_for_review(
+    client: AsyncClient, db_session: AsyncSession
+):
+    participant_token, participant_id = make_token(email="participante@example.com")
+    moderator_token, moderator_id = make_token(email="moderador@example.com")
+    await set_user_role(db_session, participant_id, Role.PARTICIPANTE)
+    await set_user_role(db_session, moderator_id, Role.MODERADOR)
+
+    payload = {
+        "nome": "Evento Pendente",
+        "data_evento": "25/12/2026",
+        "horario": "19:00",
+        "dia_semana": "Sexta",
+        "link": "https://example.com",
+        "status": "publicado",
+    }
+    create_response = await client.post("/events", json=payload, headers=auth_headers(participant_token))
+    event_id = create_response.json()["id"]
+
+    response = await client.post(f"/events/{event_id}/publish", headers=auth_headers(moderator_token))
+    assert response.status_code == 403
+
+    update_response = await client.put(
+        f"/events/{event_id}",
+        json={"status": "publicado"},
+        headers=auth_headers(moderator_token),
+    )
+    assert update_response.status_code == 403
+
+
 async def test_list_events_pagination_includes_past_events(client: AsyncClient, db_session: AsyncSession):
     token, user_id = make_token()
     await set_user_role(db_session, user_id, Role.MODERADOR)
