@@ -124,8 +124,9 @@ class EventoService:
         update_data = data.model_dump(exclude_unset=True)
         self._ensure_can_update_event(evento, update_data, actor_id, actor_role)
 
-        if actor_role == Role.PARTICIPANTE and evento.status == "publicado":
+        if actor_role == Role.PARTICIPANTE and evento.status in ("publicado", "recusado"):
             update_data["status"] = "em_analise"
+            update_data["motivo_recusa"] = None
 
         if "nome" in update_data:
             await self._ensure_unique_name(update_data["nome"], exclude_id=event_id)

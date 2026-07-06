@@ -422,7 +422,7 @@ async def test_participant_can_edit_own_published_event_and_it_returns_to_review
     assert updated["status"] == "em_analise"
 
 
-async def test_participant_can_edit_own_rejected_event_without_forcing_status(
+async def test_participant_can_edit_own_rejected_event_and_it_returns_to_review(
     client: AsyncClient, db_session: AsyncSession
 ):
     participant_token, participant_id = make_token(email="participante@example.com")
@@ -457,8 +457,8 @@ async def test_participant_can_edit_own_rejected_event_without_forcing_status(
     assert update_response.status_code == 200
     updated = update_response.json()
     assert updated["nome"] == "Evento Recusado Corrigido"
-    assert updated["status"] == "recusado"
-    assert updated["motivo_recusa"] == "Falta descricao detalhada do evento"
+    assert updated["status"] == "em_analise"
+    assert updated["motivo_recusa"] is None
 
 
 async def test_participant_cannot_edit_event_created_by_another_participant(
