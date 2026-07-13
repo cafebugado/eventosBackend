@@ -3,8 +3,9 @@ import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import CurrentUser, get_current_user
+from app.core.security import CurrentUser
 from app.db.session import get_db
+from app.rbac.permissions import require_permission
 from app.schemas.comunidade import ComunidadeCreate, ComunidadeRead, ComunidadeUpdate
 from app.services.comunidade_service import ComunidadeService
 
@@ -21,7 +22,7 @@ async def list_communities(db: AsyncSession = Depends(get_db)) -> list[Comunidad
 @router.post("", response_model=ComunidadeRead, status_code=201)
 async def create_community(
     data: ComunidadeCreate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_permission("canManageComunidades")),
     db: AsyncSession = Depends(get_db),
 ) -> ComunidadeRead:
     service = ComunidadeService(db)
@@ -33,7 +34,7 @@ async def create_community(
 async def update_community(
     community_id: uuid.UUID,
     data: ComunidadeUpdate,
-    _user: CurrentUser = Depends(get_current_user),
+    _user: CurrentUser = Depends(require_permission("canManageComunidades")),
     db: AsyncSession = Depends(get_db),
 ) -> ComunidadeRead:
     service = ComunidadeService(db)
@@ -44,7 +45,7 @@ async def update_community(
 @router.delete("/{community_id}", status_code=204)
 async def delete_community(
     community_id: uuid.UUID,
-    _user: CurrentUser = Depends(get_current_user),
+    _user: CurrentUser = Depends(require_permission("canManageComunidades")),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     service = ComunidadeService(db)

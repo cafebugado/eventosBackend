@@ -22,6 +22,8 @@ PERMISSIONS: dict[str, set[Role]] = {
     "canManageUsers": {Role.SUPER_ADMIN, Role.ADMIN},
     "canUploadImages": {Role.SUPER_ADMIN, Role.ADMIN, Role.MODERADOR, Role.PARTICIPANTE},
     "canSaveSettings": {Role.SUPER_ADMIN, Role.ADMIN, Role.MODERADOR},
+    "canManageComunidades": {Role.SUPER_ADMIN, Role.ADMIN, Role.MODERADOR},
+    "canManageGaleria": {Role.SUPER_ADMIN, Role.ADMIN, Role.MODERADOR},
 }
 
 

@@ -29,7 +29,7 @@ async def list_albums(db: AsyncSession = Depends(get_db)) -> list[GaleriaAlbumRe
 @router.post("/albums", response_model=GaleriaAlbumRead, status_code=201)
 async def create_album(
     data: GaleriaAlbumCreate,
-    current_user: CurrentUser = Depends(require_permission("canUploadImages")),
+    current_user: CurrentUser = Depends(require_permission("canManageGaleria")),
     db: AsyncSession = Depends(get_db),
 ) -> GaleriaAlbumRead:
     service = GaleriaService(db)
@@ -41,7 +41,7 @@ async def create_album(
 async def update_album(
     album_id: uuid.UUID,
     data: GaleriaAlbumUpdate,
-    _user=Depends(require_permission("canUploadImages")),
+    _user=Depends(require_permission("canManageGaleria")),
     db: AsyncSession = Depends(get_db),
 ) -> GaleriaAlbumRead:
     service = GaleriaService(db)
@@ -52,7 +52,7 @@ async def update_album(
 @router.delete("/albums/{album_id}", status_code=204)
 async def delete_album(
     album_id: uuid.UUID,
-    _user=Depends(require_permission("canUploadImages")),
+    _user=Depends(require_permission("canManageGaleria")),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     service = GaleriaService(db)
@@ -65,7 +65,7 @@ async def upload_photo(
     file: UploadFile = File(...),
     legenda: str | None = None,
     ordem: int = 0,
-    current_user: CurrentUser = Depends(require_permission("canUploadImages")),
+    current_user: CurrentUser = Depends(require_permission("canManageGaleria")),
     db: AsyncSession = Depends(get_db),
 ) -> GaleriaFotoRead:
     service = GaleriaService(db)
@@ -86,7 +86,7 @@ async def upload_photo(
 async def add_photo_by_url(
     album_id: uuid.UUID,
     data: GaleriaFotoUrlCreate,
-    current_user: CurrentUser = Depends(require_permission("canUploadImages")),
+    current_user: CurrentUser = Depends(require_permission("canManageGaleria")),
     db: AsyncSession = Depends(get_db),
 ) -> GaleriaFotoRead:
     service = GaleriaService(db)
@@ -98,7 +98,7 @@ async def add_photo_by_url(
 async def update_photo_legenda(
     photo_id: uuid.UUID,
     data: GaleriaFotoUpdate,
-    _user=Depends(require_permission("canUploadImages")),
+    _user=Depends(require_permission("canManageGaleria")),
     db: AsyncSession = Depends(get_db),
 ) -> GaleriaFotoRead:
     service = GaleriaService(db)
@@ -109,7 +109,7 @@ async def update_photo_legenda(
 @router.delete("/photos/{photo_id}", status_code=204)
 async def delete_photo(
     photo_id: uuid.UUID,
-    _user=Depends(require_permission("canUploadImages")),
+    _user=Depends(require_permission("canManageGaleria")),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     service = GaleriaService(db)

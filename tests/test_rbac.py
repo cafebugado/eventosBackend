@@ -88,3 +88,55 @@ async def test_admin_can_assign_moderador_role(client: AsyncClient, db_session: 
     )
     assert response.status_code == 200
     assert response.json()["role"] == "moderador"
+
+
+async def test_participante_cannot_create_community(client: AsyncClient, db_session: AsyncSession):
+    token, user_id = make_token()
+    await set_user_role(db_session, user_id, Role.PARTICIPANTE)
+
+    response = await client.post(
+        "/communities", json={"nome": "Comunidade Teste"}, headers=auth_headers(token)
+    )
+    assert response.status_code == 403
+
+
+async def test_participante_can_list_communities(client: AsyncClient, db_session: AsyncSession):
+    token, user_id = make_token()
+    await set_user_role(db_session, user_id, Role.PARTICIPANTE)
+
+    response = await client.get("/communities", headers=auth_headers(token))
+    assert response.status_code == 200
+
+
+async def test_moderador_can_create_community(client: AsyncClient, db_session: AsyncSession):
+    token, user_id = make_token()
+    await set_user_role(db_session, user_id, Role.MODERADOR)
+
+    response = await client.post(
+        "/communities", json={"nome": "Comunidade Teste"}, headers=auth_headers(token)
+    )
+    assert response.status_code == 201
+
+
+async def test_participante_cannot_create_gallery_album(client: AsyncClient, db_session: AsyncSession):
+    token, user_id = make_token()
+    await set_user_role(db_session, user_id, Role.PARTICIPANTE)
+
+    response = await client.post("/gallery/albums", json={}, headers=auth_headers(token))
+    assert response.status_code == 403
+
+
+async def test_participante_can_list_gallery_albums(client: AsyncClient, db_session: AsyncSession):
+    token, user_id = make_token()
+    await set_user_role(db_session, user_id, Role.PARTICIPANTE)
+
+    response = await client.get("/gallery/albums", headers=auth_headers(token))
+    assert response.status_code == 200
+
+
+async def test_moderador_can_create_gallery_album(client: AsyncClient, db_session: AsyncSession):
+    token, user_id = make_token()
+    await set_user_role(db_session, user_id, Role.MODERADOR)
+
+    response = await client.post("/gallery/albums", json={}, headers=auth_headers(token))
+    assert response.status_code == 201
