@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import date
 
@@ -31,6 +32,8 @@ class EventoRepository:
         *,
         status: str | None = None,
         date_filter: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
         search: str | None = None,
         created_by: uuid.UUID | None = None,
         page: int = 1,
@@ -41,6 +44,8 @@ class EventoRepository:
             select(Evento),
             status=status,
             date_filter=date_filter,
+            date_from=date_from,
+            date_to=date_to,
             search=search,
             created_by=created_by,
         )
@@ -48,6 +53,8 @@ class EventoRepository:
             select(func.count()).select_from(Evento),
             status=status,
             date_filter=date_filter,
+            date_from=date_from,
+            date_to=date_to,
             search=search,
             created_by=created_by,
         )
@@ -68,6 +75,8 @@ class EventoRepository:
         *,
         status: str | None,
         date_filter: str | None,
+        date_from: str | None = None,
+        date_to: str | None = None,
         search: str | None,
         created_by: uuid.UUID | None,
     ):
@@ -82,16 +91,27 @@ class EventoRepository:
                 stmt = stmt.where(event_date_key >= today_key)
             elif date_filter == "past":
                 stmt = stmt.where(event_date_key < today_key)
+        if date_from is not None or date_to is not None:
+            event_date_key = self._event_date_key()
+            if date_from is not None:
+                stmt = stmt.where(event_date_key >= date_from)
+            if date_to is not None:
+                stmt = stmt.where(event_date_key <= date_to)
         if search:
             term = search.strip().lower()
-            pattern = f"%{term}%"
-            stmt = stmt.where(
-                or_(
-                    func.lower(Evento.nome).like(pattern),
-                    func.lower(func.coalesce(Evento.descricao, "")).like(pattern),
-                    Evento.data_evento.like(f"%{term}%"),
+            iso_date_match = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", term)
+            if iso_date_match:
+                year, month, day = iso_date_match.groups()
+                stmt = stmt.where(Evento.data_evento == f"{day}/{month}/{year}")
+            else:
+                pattern = f"%{term}%"
+                stmt = stmt.where(
+                    or_(
+                        func.lower(Evento.nome).like(pattern),
+                        func.lower(func.coalesce(Evento.descricao, "")).like(pattern),
+                        Evento.data_evento.like(f"%{term}%"),
+                    )
                 )
-            )
         return stmt
 
     def _event_date_key(self):

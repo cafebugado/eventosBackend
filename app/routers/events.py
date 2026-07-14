@@ -90,6 +90,8 @@ async def list_events(
     page_size: int | None = Query(default=None, ge=1, le=100),
     status: EventoStatus | None = Query(default=None),
     date_filter: EventoDateFilter | None = Query(default=None),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
     search: str | None = Query(default=None),
     mine: bool = Query(default=False),
     current_user=Depends(require_permission("canCreateEvents")),
@@ -104,6 +106,8 @@ async def list_events(
         or page_size is not None
         or status is not None
         or date_filter is not None
+        or date_from is not None
+        or date_to is not None
         or search
         or mine
     ):
@@ -114,6 +118,8 @@ async def list_events(
             page_size=resolved_page_size,
             status=status,
             date_filter=date_filter,
+            date_from=date_from,
+            date_to=date_to,
             search=search,
             created_by=created_by,
             pending_first=pending_first,
