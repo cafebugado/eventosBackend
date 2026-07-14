@@ -144,7 +144,7 @@ async def list_published_events(
 
 
 @router.get("/upcoming", response_model=list[EventoRead])
-async def list_upcoming_events(limit: int = 3, db: AsyncSession = Depends(get_db)) -> list[EventoRead]:
+async def list_upcoming_events(limit: int = 5, db: AsyncSession = Depends(get_db)) -> list[EventoRead]:
     service = EventoService(db)
     eventos = await service.get_upcoming_events(limit)
     return _serialize_events(eventos)

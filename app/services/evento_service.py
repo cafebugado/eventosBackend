@@ -17,7 +17,7 @@ from app.schemas.evento import (
     EventoUpdate,
     EventoWithTags,
 )
-from app.utils.event_date import get_iso_week, get_iso_year, parse_event_date
+from app.utils.event_date import get_iso_week, get_iso_year, parse_event_date, parse_event_time
 from app.utils.slug import generate_slug, resolve_unique_slug
 
 REVIEW_ROLES = {Role.SUPER_ADMIN, Role.ADMIN}
@@ -182,7 +182,7 @@ class EventoService:
         published = await self.repo.list_by_status("publicado")
         return [e for e in published if e.periodo == periodo]
 
-    async def get_upcoming_events(self, limit: int = 3) -> list[Evento]:
+    async def get_upcoming_events(self, limit: int = 5) -> list[Evento]:
         published = await self.repo.list_by_status("publicado")
         today = date.today()
 
@@ -190,10 +190,10 @@ class EventoService:
         for evento in published:
             event_date = parse_event_date(evento.data_evento)
             if event_date is not None and event_date >= today:
-                upcoming.append(evento)
+                upcoming.append((event_date, evento))
 
-        upcoming.sort(key=lambda e: e.created_at, reverse=True)
-        return upcoming[:limit]
+        upcoming.sort(key=lambda item: (item[0], parse_event_time(item[1].horario)))
+        return [evento for _, evento in upcoming[:limit]]
 
     async def get_event_stats(self) -> EventoStats:
         eventos = await self.repo.list_all()

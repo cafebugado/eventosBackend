@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 
 def parse_event_date(data_evento: str) -> date | None:
@@ -9,6 +9,16 @@ def parse_event_date(data_evento: str) -> date | None:
         return datetime.strptime(data_evento.strip(), "%d/%m/%Y").date()
     except ValueError:
         return None
+
+
+def parse_event_time(horario: str) -> time:
+    """Converte um horario no formato HH:MM (str) para time. Retorna 00:00 se invalido."""
+    if not horario:
+        return time.min
+    try:
+        return datetime.strptime(horario.strip(), "%H:%M").time()
+    except ValueError:
+        return time.min
 
 
 def get_iso_week(d: date) -> int:
