@@ -120,6 +120,7 @@ class EventoStats(BaseModel):
 class DiaSemanaCount(BaseModel):
     dia_semana: str
     total: int
+    percentual: float
 
 
 class PeriodoCount(BaseModel):

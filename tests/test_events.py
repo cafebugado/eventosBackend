@@ -727,8 +727,29 @@ async def test_get_event_metrics_returns_aggregations(client: AsyncClient, db_se
     assert data["total_eventos"] == 3
     assert data["media_eventos_por_semana"] > 0
 
+    assert [item["dia_semana"] for item in data["por_dia_semana"]] == [
+        "Domingo",
+        "Segunda",
+        "Terça",
+        "Quarta",
+        "Quinta",
+        "Sexta",
+        "Sábado",
+    ]
     dia_semana_totais = {item["dia_semana"]: item["total"] for item in data["por_dia_semana"]}
-    assert dia_semana_totais == {"Sexta": 2, "Sábado": 1}
+    assert dia_semana_totais == {
+        "Domingo": 0,
+        "Segunda": 0,
+        "Terça": 0,
+        "Quarta": 0,
+        "Quinta": 0,
+        "Sexta": 2,
+        "Sábado": 1,
+    }
+    dia_semana_percentuais = {item["dia_semana"]: item["percentual"] for item in data["por_dia_semana"]}
+    assert dia_semana_percentuais["Sexta"] == round(2 / 3 * 100, 1)
+    assert dia_semana_percentuais["Sábado"] == round(1 / 3 * 100, 1)
+    assert dia_semana_percentuais["Domingo"] == 0.0
 
     status_totais = {item["status"]: item["total"] for item in data["por_status"]}
     assert status_totais == {"publicado": 2, "rascunho": 1}
@@ -779,4 +800,55 @@ async def test_get_event_metrics_filters_by_date_range(client: AsyncClient, db_s
     assert response.status_code == 200
     data = response.json()
     assert data["total_eventos"] == 1
-    assert data["por_dia_semana"] == [{"dia_semana": "Segunda", "total": 1}]
+    dia_semana_totais = {item["dia_semana"]: item["total"] for item in data["por_dia_semana"]}
+    assert dia_semana_totais["Segunda"] == 1
+    assert sum(dia_semana_totais.values()) == 1
+
+
+async def test_get_event_metrics_normaliza_variacoes_de_dia_semana(
+    client: AsyncClient, db_session: AsyncSession
+):
+    token, user_id = make_token()
+    await set_user_role(db_session, user_id, Role.MODERADOR)
+
+    db_session.add_all(
+        [
+            Evento(
+                nome="Evento Segunda A",
+                slug="evento-segunda-a",
+                data_evento="05/01/2026",
+                horario="19:00",
+                dia_semana="Segunda",
+                link="https://example.com",
+                status="publicado",
+            ),
+            Evento(
+                nome="Evento Segunda B",
+                slug="evento-segunda-b",
+                data_evento="12/01/2026",
+                horario="19:00",
+                dia_semana="Segunda-feira",
+                link="https://example.com",
+                status="publicado",
+            ),
+            Evento(
+                nome="Evento Segunda C",
+                slug="evento-segunda-c",
+                data_evento="19/01/2026",
+                horario="19:00",
+                dia_semana="SEGUNDA-FEIRA",
+                link="https://example.com",
+                status="publicado",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await client.get("/events/metrics", headers=auth_headers(token))
+    assert response.status_code == 200
+    data = response.json()
+
+    assert len(data["por_dia_semana"]) == 7
+    dia_semana_totais = {item["dia_semana"]: item["total"] for item in data["por_dia_semana"]}
+    assert dia_semana_totais["Segunda"] == 3
+    assert sum(dia_semana_totais.values()) == 3

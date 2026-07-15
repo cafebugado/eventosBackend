@@ -1,3 +1,4 @@
+import unicodedata
 import uuid
 from datetime import date
 
@@ -30,6 +31,25 @@ from app.utils.slug import generate_slug, resolve_unique_slug
 
 REVIEW_ROLES = {Role.SUPER_ADMIN, Role.ADMIN}
 REVIEW_STATUSES = {"em_analise", "recusado"}
+
+DIAS_SEMANA_ORDEM = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]
+
+
+def _normalize_dia_semana(valor: str | None) -> str | None:
+    if not valor:
+        return None
+    texto = valor.strip().lower()
+    texto = texto.removesuffix("-feira").strip()
+    texto_sem_acento = "".join(
+        c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn"
+    )
+    for dia in DIAS_SEMANA_ORDEM:
+        dia_sem_acento = "".join(
+            c for c in unicodedata.normalize("NFD", dia.lower()) if unicodedata.category(c) != "Mn"
+        )
+        if texto_sem_acento == dia_sem_acento:
+            return dia
+    return None
 
 
 class EventoService:
@@ -241,10 +261,7 @@ class EventoService:
         return EventoMetrics(
             total_eventos=total_eventos,
             media_eventos_por_semana=media_eventos_por_semana,
-            por_dia_semana=[
-                DiaSemanaCount(dia_semana=dia or "Não informado", total=total)
-                for dia, total in por_dia_semana
-            ],
+            por_dia_semana=self._build_dia_semana_counts(por_dia_semana, total_eventos),
             por_periodo=[
                 PeriodoCount(periodo=periodo or "Não informado", total=total)
                 for periodo, total in por_periodo
@@ -266,6 +283,26 @@ class EventoService:
                 MonthlyCount(ano_mes=ano_mes, total=total) for ano_mes, total in evolucao_mensal
             ],
         )
+
+    def _build_dia_semana_counts(
+        self, por_dia_semana: list[tuple[str | None, int]], total_eventos: int
+    ) -> list[DiaSemanaCount]:
+        totais_por_dia = {dia: 0 for dia in DIAS_SEMANA_ORDEM}
+        for dia_bruto, total in por_dia_semana:
+            dia_canonico = _normalize_dia_semana(dia_bruto)
+            if dia_canonico is not None:
+                totais_por_dia[dia_canonico] += total
+
+        return [
+            DiaSemanaCount(
+                dia_semana=dia,
+                total=totais_por_dia[dia],
+                percentual=(
+                    round(totais_por_dia[dia] / total_eventos * 100, 1) if total_eventos > 0 else 0.0
+                ),
+            )
+            for dia in DIAS_SEMANA_ORDEM
+        ]
 
     async def get_recommended_events(self, event_id: uuid.UUID, limit: int = 3) -> list[EventoWithTags]:
         current_event = await self.get_event_by_id(event_id)
