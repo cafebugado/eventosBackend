@@ -5,6 +5,8 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.evento import Evento
+from app.models.evento_tag import EventoTag
+from app.models.tag import Tag
 from app.rbac.roles import Role
 from tests.conftest import make_token, set_user_role
 
@@ -649,3 +651,132 @@ async def test_get_event_by_slug(client: AsyncClient, db_session: AsyncSession):
 async def test_get_event_by_slug_not_found(client: AsyncClient):
     response = await client.get("/events/slug/does-not-exist")
     assert response.status_code == 404
+
+
+async def test_get_event_metrics_requires_auth(client: AsyncClient):
+    response = await client.get("/events/metrics")
+    assert response.status_code == 401
+
+
+async def test_get_event_metrics_returns_aggregations(client: AsyncClient, db_session: AsyncSession):
+    token, user_id = make_token()
+    await set_user_role(db_session, user_id, Role.MODERADOR)
+
+    tag_python = Tag(nome="Python", cor="#2563eb")
+    tag_ia = Tag(nome="IA", cor="#16a34a")
+    db_session.add_all([tag_python, tag_ia])
+    await db_session.flush()
+
+    eventos = [
+        Evento(
+            nome="Meetup Python SP",
+            slug="meetup-python-sp",
+            data_evento="10/01/2026",
+            horario="19:00",
+            dia_semana="Sexta",
+            periodo="Noturno",
+            modalidade="Presencial",
+            cidade="São Paulo",
+            estado="SP",
+            link="https://example.com",
+            status="publicado",
+        ),
+        Evento(
+            nome="Meetup Python RJ",
+            slug="meetup-python-rj",
+            data_evento="17/01/2026",
+            horario="09:00",
+            dia_semana="Sexta",
+            periodo="Matinal",
+            modalidade="Online",
+            cidade="Rio de Janeiro",
+            estado="RJ",
+            link="https://example.com",
+            status="publicado",
+        ),
+        Evento(
+            nome="Workshop IA",
+            slug="workshop-ia",
+            data_evento="24/01/2026",
+            horario="14:00",
+            dia_semana="Sábado",
+            periodo="Vespertino",
+            modalidade="Online",
+            cidade="São Paulo",
+            estado="SP",
+            link="https://example.com",
+            status="rascunho",
+        ),
+    ]
+    db_session.add_all(eventos)
+    await db_session.flush()
+
+    db_session.add_all(
+        [
+            EventoTag(evento_id=eventos[0].id, tag_id=tag_python.id),
+            EventoTag(evento_id=eventos[1].id, tag_id=tag_python.id),
+            EventoTag(evento_id=eventos[2].id, tag_id=tag_ia.id),
+        ]
+    )
+    await db_session.commit()
+
+    response = await client.get("/events/metrics", headers=auth_headers(token))
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["total_eventos"] == 3
+    assert data["media_eventos_por_semana"] > 0
+
+    dia_semana_totais = {item["dia_semana"]: item["total"] for item in data["por_dia_semana"]}
+    assert dia_semana_totais == {"Sexta": 2, "Sábado": 1}
+
+    status_totais = {item["status"]: item["total"] for item in data["por_status"]}
+    assert status_totais == {"publicado": 2, "rascunho": 1}
+
+    top_tags = {item["nome"]: item["total"] for item in data["top_tags"]}
+    assert top_tags == {"Python": 2, "IA": 1}
+
+    assert data["evolucao_mensal"] == [{"ano_mes": "2026-01", "total": 3}]
+
+    cidades = {item["cidade"] for item in data["por_cidade"]}
+    assert cidades == {"São Paulo", "Rio de Janeiro"}
+
+
+async def test_get_event_metrics_filters_by_date_range(client: AsyncClient, db_session: AsyncSession):
+    token, user_id = make_token()
+    await set_user_role(db_session, user_id, Role.MODERADOR)
+
+    db_session.add_all(
+        [
+            Evento(
+                nome="Evento Fora do Range",
+                slug="evento-fora-do-range",
+                data_evento="01/01/2025",
+                horario="19:00",
+                dia_semana="Quarta",
+                link="https://example.com",
+                status="publicado",
+            ),
+            Evento(
+                nome="Evento Dentro do Range",
+                slug="evento-dentro-do-range",
+                data_evento="15/06/2026",
+                horario="19:00",
+                dia_semana="Segunda",
+                link="https://example.com",
+                status="publicado",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await client.get(
+        "/events/metrics",
+        params={"date_from": "2026-01-01", "date_to": "2026-12-31"},
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_eventos"] == 1
+    assert data["por_dia_semana"] == [{"dia_semana": "Segunda", "total": 1}]

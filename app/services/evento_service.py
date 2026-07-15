@@ -10,12 +10,20 @@ from app.rbac.roles import Role
 from app.repositories.evento_repository import EventoRepository
 from app.repositories.tag_repository import TagRepository
 from app.schemas.evento import (
+    CidadeCount,
+    DiaSemanaCount,
     EventoCreate,
     EventoDateFilter,
+    EventoMetrics,
     EventoStats,
     EventoStatus,
     EventoUpdate,
     EventoWithTags,
+    ModalidadeCount,
+    MonthlyCount,
+    PeriodoCount,
+    StatusCount,
+    TagCount,
 )
 from app.utils.event_date import get_iso_week, get_iso_year, parse_event_date, parse_event_time
 from app.utils.slug import generate_slug, resolve_unique_slug
@@ -207,6 +215,56 @@ class EventoService:
             rascunhos=sum(1 for e in eventos if e.status == "rascunho"),
             noturno=sum(1 for e in eventos if e.periodo == "Noturno"),
             diurno=sum(1 for e in eventos if e.periodo == "Diurno"),
+        )
+
+    async def get_event_metrics(
+        self, *, date_from: str | None = None, date_to: str | None = None
+    ) -> EventoMetrics:
+        por_dia_semana = await self.repo.count_by_dia_semana(date_from=date_from, date_to=date_to)
+        por_periodo = await self.repo.count_by_periodo(date_from=date_from, date_to=date_to)
+        por_modalidade = await self.repo.count_by_modalidade(date_from=date_from, date_to=date_to)
+        por_cidade = await self.repo.count_by_cidade(date_from=date_from, date_to=date_to)
+        por_status = await self.repo.count_by_status(date_from=date_from, date_to=date_to)
+        evolucao_mensal = await self.repo.count_by_month(date_from=date_from, date_to=date_to)
+        top_tags = await self.tag_repo.get_top_tags(date_from=date_from, date_to=date_to)
+        min_date, max_date = await self.repo.get_date_bounds(date_from=date_from, date_to=date_to)
+
+        total_eventos = sum(total for _, total in por_status)
+
+        media_eventos_por_semana = 0.0
+        if total_eventos > 0 and min_date and max_date:
+            first = date.fromisoformat(min_date)
+            last = date.fromisoformat(max_date)
+            semanas = max((last - first).days / 7, 1)
+            media_eventos_por_semana = round(total_eventos / semanas, 2)
+
+        return EventoMetrics(
+            total_eventos=total_eventos,
+            media_eventos_por_semana=media_eventos_por_semana,
+            por_dia_semana=[
+                DiaSemanaCount(dia_semana=dia or "Não informado", total=total)
+                for dia, total in por_dia_semana
+            ],
+            por_periodo=[
+                PeriodoCount(periodo=periodo or "Não informado", total=total)
+                for periodo, total in por_periodo
+            ],
+            por_modalidade=[
+                ModalidadeCount(modalidade=modalidade or "Não informado", total=total)
+                for modalidade, total in por_modalidade
+            ],
+            por_cidade=[
+                CidadeCount(cidade=cidade, estado=estado, total=total)
+                for cidade, estado, total in por_cidade
+            ],
+            por_status=[StatusCount(status=status_, total=total) for status_, total in por_status],
+            top_tags=[
+                TagCount(tag_id=tag_id, nome=nome, cor=cor, total=total)
+                for tag_id, nome, cor, total in top_tags
+            ],
+            evolucao_mensal=[
+                MonthlyCount(ano_mes=ano_mes, total=total) for ano_mes, total in evolucao_mensal
+            ],
         )
 
     async def get_recommended_events(self, event_id: uuid.UUID, limit: int = 3) -> list[EventoWithTags]:

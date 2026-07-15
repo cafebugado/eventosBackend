@@ -123,6 +123,105 @@ class EventoRepository:
             + func.substr(Evento.data_evento, 1, 2)
         )
 
+    def _event_month_key(self):
+        return func.substr(Evento.data_evento, 7, 4) + "-" + func.substr(Evento.data_evento, 4, 2)
+
+    def _metrics_filter(self, stmt, *, date_from: str | None, date_to: str | None):
+        return self._apply_filters(
+            stmt,
+            status=None,
+            date_filter=None,
+            date_from=date_from,
+            date_to=date_to,
+            search=None,
+            created_by=None,
+        )
+
+    async def count_by_dia_semana(
+        self, *, date_from: str | None = None, date_to: str | None = None
+    ) -> list[tuple[str, int]]:
+        stmt = self._metrics_filter(
+            select(Evento.dia_semana, func.count()).group_by(Evento.dia_semana),
+            date_from=date_from,
+            date_to=date_to,
+        )
+        result = await self.db.execute(stmt)
+        return list(result.all())
+
+    async def count_by_periodo(
+        self, *, date_from: str | None = None, date_to: str | None = None
+    ) -> list[tuple[str | None, int]]:
+        stmt = self._metrics_filter(
+            select(Evento.periodo, func.count()).group_by(Evento.periodo),
+            date_from=date_from,
+            date_to=date_to,
+        )
+        result = await self.db.execute(stmt)
+        return list(result.all())
+
+    async def count_by_modalidade(
+        self, *, date_from: str | None = None, date_to: str | None = None
+    ) -> list[tuple[str | None, int]]:
+        stmt = self._metrics_filter(
+            select(Evento.modalidade, func.count()).group_by(Evento.modalidade),
+            date_from=date_from,
+            date_to=date_to,
+        )
+        result = await self.db.execute(stmt)
+        return list(result.all())
+
+    async def count_by_cidade(
+        self, *, limit: int = 10, date_from: str | None = None, date_to: str | None = None
+    ) -> list[tuple[str | None, str | None, int]]:
+        stmt = self._metrics_filter(
+            select(Evento.cidade, Evento.estado, func.count())
+            .where(Evento.cidade.isnot(None))
+            .group_by(Evento.cidade, Evento.estado)
+            .order_by(func.count().desc())
+            .limit(limit),
+            date_from=date_from,
+            date_to=date_to,
+        )
+        result = await self.db.execute(stmt)
+        return list(result.all())
+
+    async def count_by_status(
+        self, *, date_from: str | None = None, date_to: str | None = None
+    ) -> list[tuple[str, int]]:
+        stmt = self._metrics_filter(
+            select(Evento.status, func.count()).group_by(Evento.status),
+            date_from=date_from,
+            date_to=date_to,
+        )
+        result = await self.db.execute(stmt)
+        return list(result.all())
+
+    async def count_by_month(
+        self, *, date_from: str | None = None, date_to: str | None = None
+    ) -> list[tuple[str, int]]:
+        month_key = self._event_month_key()
+        stmt = self._metrics_filter(
+            select(month_key.label("ano_mes"), func.count())
+            .group_by(month_key)
+            .order_by(month_key),
+            date_from=date_from,
+            date_to=date_to,
+        )
+        result = await self.db.execute(stmt)
+        return list(result.all())
+
+    async def get_date_bounds(
+        self, *, date_from: str | None = None, date_to: str | None = None
+    ) -> tuple[str | None, str | None]:
+        date_key = self._event_date_key()
+        stmt = self._metrics_filter(
+            select(func.min(date_key), func.max(date_key)),
+            date_from=date_from,
+            date_to=date_to,
+        )
+        result = await self.db.execute(stmt)
+        return result.one()
+
     def _order_by(self, *, pending_first: bool):
         if not pending_first:
             return (Evento.created_at.desc(),)

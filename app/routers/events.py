@@ -13,6 +13,7 @@ from app.rbac.roles import Role
 from app.schemas.evento import (
     EventoCreate,
     EventoDateFilter,
+    EventoMetrics,
     EventoPage,
     EventoRead,
     EventoRejectRequest,
@@ -163,6 +164,17 @@ async def get_event_stats(
 ) -> EventoStats:
     service = EventoService(db)
     return await service.get_event_stats()
+
+
+@router.get("/metrics", response_model=EventoMetrics)
+async def get_event_metrics(
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    _user=Depends(require_permission("canCreateEvents")),
+    db: AsyncSession = Depends(get_db),
+) -> EventoMetrics:
+    service = EventoService(db)
+    return await service.get_event_metrics(date_from=date_from, date_to=date_to)
 
 
 @router.get("/by-period/{periodo}", response_model=list[EventoRead])

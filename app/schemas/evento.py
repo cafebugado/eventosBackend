@@ -117,6 +117,56 @@ class EventoStats(BaseModel):
     diurno: int
 
 
+class DiaSemanaCount(BaseModel):
+    dia_semana: str
+    total: int
+
+
+class PeriodoCount(BaseModel):
+    periodo: str
+    total: int
+
+
+class ModalidadeCount(BaseModel):
+    modalidade: str
+    total: int
+
+
+class CidadeCount(BaseModel):
+    cidade: str
+    estado: str | None
+    total: int
+
+
+class StatusCount(BaseModel):
+    status: str
+    total: int
+
+
+class TagCount(BaseModel):
+    tag_id: uuid.UUID
+    nome: str
+    cor: str
+    total: int
+
+
+class MonthlyCount(BaseModel):
+    ano_mes: str
+    total: int
+
+
+class EventoMetrics(BaseModel):
+    total_eventos: int
+    media_eventos_por_semana: float
+    por_dia_semana: list[DiaSemanaCount]
+    por_periodo: list[PeriodoCount]
+    por_modalidade: list[ModalidadeCount]
+    por_cidade: list[CidadeCount]
+    por_status: list[StatusCount]
+    top_tags: list[TagCount]
+    evolucao_mensal: list[MonthlyCount]
+
+
 from app.schemas.tag import TagRead  # noqa: E402
 
 EventoWithTags.model_rebuild()

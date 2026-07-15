@@ -1,8 +1,9 @@
 import uuid
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.evento import Evento
 from app.models.evento_tag import EventoTag
 from app.models.tag import Tag
 
@@ -52,6 +53,31 @@ class TagRepository:
         for evento_id, tag in result.all():
             mapping.setdefault(evento_id, []).append(tag)
         return mapping
+
+    async def get_top_tags(
+        self, *, limit: int = 10, date_from: str | None = None, date_to: str | None = None
+    ) -> list[tuple[uuid.UUID, str, str, int]]:
+        total = func.count(EventoTag.evento_id)
+        stmt = (
+            select(Tag.id, Tag.nome, Tag.cor, total)
+            .join(EventoTag, EventoTag.tag_id == Tag.id)
+        )
+        if date_from is not None or date_to is not None:
+            date_key = (
+                func.substr(Evento.data_evento, 7, 4)
+                + "-"
+                + func.substr(Evento.data_evento, 4, 2)
+                + "-"
+                + func.substr(Evento.data_evento, 1, 2)
+            )
+            stmt = stmt.join(Evento, Evento.id == EventoTag.evento_id)
+            if date_from is not None:
+                stmt = stmt.where(date_key >= date_from)
+            if date_to is not None:
+                stmt = stmt.where(date_key <= date_to)
+        stmt = stmt.group_by(Tag.id, Tag.nome, Tag.cor).order_by(total.desc()).limit(limit)
+        result = await self.db.execute(stmt)
+        return list(result.all())
 
     async def set_event_tags(self, evento_id: uuid.UUID, tag_ids: list[uuid.UUID]) -> None:
         await self.db.execute(delete(EventoTag).where(EventoTag.evento_id == evento_id))
