@@ -231,6 +231,36 @@ class EventoRepository:
             Evento.created_at.desc(),
         )
 
+    async def count_dashboard_periods(
+        self,
+        *,
+        today: str,
+        week_start: str,
+        week_end: str,
+        month_start: str,
+        month_end: str,
+        year_start: str,
+        year_end: str,
+        created_by: uuid.UUID | None = None,
+    ) -> dict[str, int]:
+        date_key = self._event_date_key()
+        totals = {
+            "total": func.count(),
+            "hoje": func.count(case((date_key == today, 1))),
+            "semana": func.count(case((date_key.between(week_start, week_end), 1))),
+            "mes": func.count(case((date_key.between(month_start, month_end), 1))),
+            "ano": func.count(case((date_key.between(year_start, year_end), 1))),
+            "diurno": func.count(case((Evento.periodo == "Diurno", 1))),
+            "noturno": func.count(case((Evento.periodo == "Noturno", 1))),
+        }
+        if created_by is not None:
+            totals["meus_eventos"] = func.count(case((Evento.created_by == created_by, 1)))
+
+        stmt = select(*totals.values())
+        result = await self.db.execute(stmt)
+        row = result.one()
+        return dict(zip(totals.keys(), row, strict=True))
+
     async def list_by_status(self, status: str, limit: int | None = None, offset: int = 0) -> list[Evento]:
         stmt = select(Evento).where(Evento.status == status).order_by(Evento.created_at.desc())
         if limit is not None:

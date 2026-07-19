@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.comunidade import Comunidade
@@ -13,6 +13,10 @@ class ComunidadeRepository:
     async def list_all(self) -> list[Comunidade]:
         result = await self.db.execute(select(Comunidade).order_by(Comunidade.nome))
         return list(result.scalars().all())
+
+    async def count_all(self) -> int:
+        result = await self.db.execute(select(func.count()).select_from(Comunidade))
+        return result.scalar_one()
 
     async def get_by_id(self, comunidade_id: uuid.UUID) -> Comunidade | None:
         result = await self.db.execute(select(Comunidade).where(Comunidade.id == comunidade_id))

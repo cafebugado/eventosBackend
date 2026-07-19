@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import bindparam, select, text
+from sqlalchemy import bindparam, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user_profile import UserProfile
@@ -15,6 +15,10 @@ class UserRepository:
     async def get_role(self, user_id: uuid.UUID) -> UserRole | None:
         result = await self.db.execute(select(UserRole).where(UserRole.user_id == user_id))
         return result.scalar_one_or_none()
+
+    async def count_all(self) -> int:
+        result = await self.db.execute(select(func.count()).select_from(UserRole))
+        return result.scalar_one()
 
     async def list_roles(self) -> list[tuple[UserRole, UserProfile | None]]:
         result = await self.db.execute(

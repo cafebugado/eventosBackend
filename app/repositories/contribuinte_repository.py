@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contribuinte import Contribuinte
@@ -13,6 +13,10 @@ class ContribuinteRepository:
     async def list_all(self) -> list[Contribuinte]:
         result = await self.db.execute(select(Contribuinte).order_by(Contribuinte.nome))
         return list(result.scalars().all())
+
+    async def count_all(self) -> int:
+        result = await self.db.execute(select(func.count()).select_from(Contribuinte))
+        return result.scalar_one()
 
     async def get_by_id(self, contribuinte_id: uuid.UUID) -> Contribuinte | None:
         result = await self.db.execute(select(Contribuinte).where(Contribuinte.id == contribuinte_id))

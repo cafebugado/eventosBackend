@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -18,6 +18,10 @@ class GaleriaRepository:
             .order_by(GaleriaAlbum.created_at.desc())
         )
         return list(result.scalars().all())
+
+    async def count_fotos(self) -> int:
+        result = await self.db.execute(select(func.count()).select_from(GaleriaFoto))
+        return result.scalar_one()
 
     async def get_album(self, album_id: uuid.UUID) -> GaleriaAlbum | None:
         result = await self.db.execute(

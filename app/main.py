@@ -8,7 +8,19 @@ from app.core.exceptions import register_exception_handlers
 from app.core.limiter import limiter
 from app.core.logging import setup_logging
 from app.core.telemetry import setup_telemetry
-from app.routers import audit, auth, communities, contributors, events, gallery, github, meta, tags, users
+from app.routers import (
+    audit,
+    auth,
+    communities,
+    contributors,
+    dashboard,
+    events,
+    gallery,
+    github,
+    meta,
+    tags,
+    users,
+)
 
 setup_logging()
 
@@ -43,3 +55,4 @@ app.include_router(gallery.router)
 app.include_router(contributors.router)
 app.include_router(audit.router)
 app.include_router(github.router)
+app.include_router(dashboard.router)
