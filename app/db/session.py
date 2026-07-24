@@ -1,8 +1,11 @@
 from collections.abc import AsyncGenerator
 
+from fastapi import Depends
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
+from app.core.security import CurrentUser, get_optional_user
 
 engine = create_async_engine(
     settings.DATABASE_URL,
@@ -25,6 +28,13 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
+async def get_db(
+    current_user: CurrentUser | None = Depends(get_optional_user),
+) -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
+        await session.execute(
+            text("SELECT set_config('app.current_user_id', :user_id, false)"),
+            {"user_id": current_user.id if current_user is not None else ""},
+        )
+        await session.commit()
         yield session
