@@ -273,6 +273,7 @@ class EventoService:
             por_cidade=[
                 CidadeCount(cidade=cidade, estado=estado, total=total)
                 for cidade, estado, total in por_cidade
+                if cidade is not None
             ],
             por_status=[StatusCount(status=status_, total=total) for status_, total in por_status],
             top_tags=[

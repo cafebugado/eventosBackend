@@ -139,14 +139,14 @@ class EventoRepository:
 
     async def count_by_dia_semana(
         self, *, date_from: str | None = None, date_to: str | None = None
-    ) -> list[tuple[str, int]]:
+    ) -> list[tuple[str | None, int]]:
         stmt = self._metrics_filter(
             select(Evento.dia_semana, func.count()).group_by(Evento.dia_semana),
             date_from=date_from,
             date_to=date_to,
         )
         result = await self.db.execute(stmt)
-        return list(result.all())
+        return list(result.tuples().all())
 
     async def count_by_periodo(
         self, *, date_from: str | None = None, date_to: str | None = None
@@ -157,7 +157,7 @@ class EventoRepository:
             date_to=date_to,
         )
         result = await self.db.execute(stmt)
-        return list(result.all())
+        return list(result.tuples().all())
 
     async def count_by_modalidade(
         self, *, date_from: str | None = None, date_to: str | None = None
@@ -168,7 +168,7 @@ class EventoRepository:
             date_to=date_to,
         )
         result = await self.db.execute(stmt)
-        return list(result.all())
+        return list(result.tuples().all())
 
     async def count_by_cidade(
         self, *, limit: int = 10, date_from: str | None = None, date_to: str | None = None
@@ -183,7 +183,7 @@ class EventoRepository:
             date_to=date_to,
         )
         result = await self.db.execute(stmt)
-        return list(result.all())
+        return list(result.tuples().all())
 
     async def count_by_status(
         self, *, date_from: str | None = None, date_to: str | None = None
@@ -194,7 +194,7 @@ class EventoRepository:
             date_to=date_to,
         )
         result = await self.db.execute(stmt)
-        return list(result.all())
+        return list(result.tuples().all())
 
     async def count_by_month(
         self, *, date_from: str | None = None, date_to: str | None = None
@@ -208,7 +208,7 @@ class EventoRepository:
             date_to=date_to,
         )
         result = await self.db.execute(stmt)
-        return list(result.all())
+        return list(result.tuples().all())
 
     async def get_date_bounds(
         self, *, date_from: str | None = None, date_to: str | None = None
@@ -220,7 +220,7 @@ class EventoRepository:
             date_to=date_to,
         )
         result = await self.db.execute(stmt)
-        return result.one()
+        return result.tuples().one()
 
     def _order_by(self, *, pending_first: bool):
         if not pending_first:

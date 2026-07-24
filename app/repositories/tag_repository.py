@@ -77,7 +77,7 @@ class TagRepository:
                 stmt = stmt.where(date_key <= date_to)
         stmt = stmt.group_by(Tag.id, Tag.nome, Tag.cor).order_by(total.desc()).limit(limit)
         result = await self.db.execute(stmt)
-        return list(result.all())
+        return list(result.tuples().all())
 
     async def set_event_tags(self, evento_id: uuid.UUID, tag_ids: list[uuid.UUID]) -> None:
         await self.db.execute(delete(EventoTag).where(EventoTag.evento_id == evento_id))
