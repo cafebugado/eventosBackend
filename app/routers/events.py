@@ -15,6 +15,7 @@ from app.schemas.evento import (
     EventoDateFilter,
     EventoMetrics,
     EventoPage,
+    EventoPublicStats,
     EventoRead,
     EventoRejectRequest,
     EventoStats,
@@ -164,6 +165,13 @@ async def get_event_stats(
 ) -> EventoStats:
     service = EventoService(db)
     return await service.get_event_stats()
+
+
+@router.get("/stats/public", response_model=EventoPublicStats)
+async def get_public_event_stats(db: AsyncSession = Depends(get_db)) -> EventoPublicStats:
+    """Estatisticas agregadas de eventos publicados, sem autenticacao — para consumo do frontend publico."""
+    service = EventoService(db)
+    return await service.get_public_event_stats()
 
 
 @router.get("/metrics", response_model=EventoMetrics)

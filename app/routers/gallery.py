@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.rbac.permissions import require_permission
 from app.schemas.galeria import (
     GaleriaAlbumCreate,
+    GaleriaAlbumPublicRead,
     GaleriaAlbumRead,
     GaleriaAlbumUpdate,
     GaleriaFotoRead,
@@ -24,6 +25,13 @@ async def list_albums(db: AsyncSession = Depends(get_db)) -> list[GaleriaAlbumRe
     service = GaleriaService(db)
     albums = await service.get_albums()
     return [GaleriaAlbumRead.model_validate(a) for a in albums]
+
+
+@router.get("/albums/public", response_model=list[GaleriaAlbumPublicRead])
+async def list_albums_public(db: AsyncSession = Depends(get_db)) -> list[GaleriaAlbumPublicRead]:
+    """Albuns com nome do evento/comunidade/autor resolvidos — sem autenticacao, p/ frontend publico."""
+    service = GaleriaService(db)
+    return await service.get_public_albums()
 
 
 @router.post("/albums", response_model=GaleriaAlbumRead, status_code=201)

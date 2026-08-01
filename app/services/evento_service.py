@@ -16,6 +16,7 @@ from app.schemas.evento import (
     EventoCreate,
     EventoDateFilter,
     EventoMetrics,
+    EventoPublicStats,
     EventoStats,
     EventoStatus,
     EventoUpdate,
@@ -235,6 +236,15 @@ class EventoService:
             rascunhos=sum(1 for e in eventos if e.status == "rascunho"),
             noturno=sum(1 for e in eventos if e.periodo == "Noturno"),
             diurno=sum(1 for e in eventos if e.periodo == "Diurno"),
+        )
+
+    async def get_public_event_stats(self) -> EventoPublicStats:
+        eventos = await self.repo.list_all()
+        publicados = [e for e in eventos if e.status == "publicado"]
+        return EventoPublicStats(
+            total_publicados=len(publicados),
+            noturno=sum(1 for e in publicados if e.periodo == "Noturno"),
+            diurno=sum(1 for e in publicados if e.periodo == "Diurno"),
         )
 
     async def get_event_metrics(

@@ -47,3 +47,22 @@ class GaleriaFotoUrlCreate(BaseModel):
 
 class GaleriaFotoUpdate(BaseModel):
     legenda: str | None = None
+
+
+class GaleriaFotoPublicRead(BaseModel):
+    id: uuid.UUID
+    url: str
+    legenda: str | None = None
+    ordem: int
+    uploaded_by_nome: str | None = None
+    created_at: datetime
+
+
+class GaleriaAlbumPublicRead(BaseModel):
+    id: uuid.UUID
+    evento_nome: str | None = None
+    evento_data: str | None = None
+    comunidade_nome: str | None = None
+    created_by_nome: str | None = None
+    created_at: datetime
+    fotos: list[GaleriaFotoPublicRead] = []
