@@ -19,6 +19,18 @@ class GaleriaRepository:
         )
         return list(result.scalars().all())
 
+    async def list_albums_public(self) -> list[GaleriaAlbum]:
+        result = await self.db.execute(
+            select(GaleriaAlbum)
+            .options(
+                selectinload(GaleriaAlbum.fotos),
+                selectinload(GaleriaAlbum.evento),
+                selectinload(GaleriaAlbum.comunidade),
+            )
+            .order_by(GaleriaAlbum.created_at.desc())
+        )
+        return list(result.scalars().all())
+
     async def count_fotos(self) -> int:
         result = await self.db.execute(select(func.count()).select_from(GaleriaFoto))
         return result.scalar_one()

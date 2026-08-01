@@ -1,11 +1,16 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Integer, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.comunidade import Comunidade
+    from app.models.evento import Evento
 
 
 class GaleriaAlbum(Base):
@@ -33,6 +38,8 @@ class GaleriaAlbum(Base):
     fotos: Mapped[list["GaleriaFoto"]] = relationship(
         back_populates="album", cascade="all, delete-orphan"
     )
+    evento: Mapped["Evento | None"] = relationship(viewonly=True)
+    comunidade: Mapped["Comunidade | None"] = relationship(viewonly=True)
 
 
 class GaleriaFoto(Base):

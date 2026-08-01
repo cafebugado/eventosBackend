@@ -117,6 +117,12 @@ class EventoStats(BaseModel):
     diurno: int
 
 
+class EventoPublicStats(BaseModel):
+    total_publicados: int
+    noturno: int
+    diurno: int
+
+
 class DiaSemanaCount(BaseModel):
     dia_semana: str
     total: int

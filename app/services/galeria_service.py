@@ -1,17 +1,27 @@
 import uuid
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.integrations.supabase_storage import remove_file, upload_file
 from app.models.galeria import GaleriaAlbum, GaleriaFoto
+from app.models.user_profile import UserProfile
 from app.repositories.galeria_repository import GaleriaRepository
 from app.schemas.galeria import (
     GaleriaAlbumCreate,
+    GaleriaAlbumPublicRead,
     GaleriaAlbumUpdate,
+    GaleriaFotoPublicRead,
     GaleriaFotoUpdate,
     GaleriaFotoUrlCreate,
 )
+
+
+def _profile_display_name(profile: UserProfile | None) -> str | None:
+    if profile is None:
+        return None
+    return " ".join(part for part in (profile.nome, profile.sobrenome) if part) or None
 
 
 class GaleriaService:
@@ -21,6 +31,46 @@ class GaleriaService:
 
     async def get_albums(self) -> list[GaleriaAlbum]:
         return await self.repo.list_albums()
+
+    async def get_public_albums(self) -> list[GaleriaAlbumPublicRead]:
+        albums = await self.repo.list_albums_public()
+
+        user_ids = {album.created_by for album in albums if album.created_by is not None}
+        user_ids.update(
+            foto.uploaded_by for album in albums for foto in album.fotos if foto.uploaded_by is not None
+        )
+        profiles_map: dict[uuid.UUID, UserProfile] = {}
+        if user_ids:
+            result = await self.db.execute(
+                select(UserProfile).where(UserProfile.user_id.in_(user_ids))
+            )
+            profiles_map = {profile.user_id: profile for profile in result.scalars().all()}
+
+        def _profile_for(user_id: uuid.UUID | None) -> UserProfile | None:
+            return profiles_map.get(user_id) if user_id is not None else None
+
+        return [
+            GaleriaAlbumPublicRead(
+                id=album.id,
+                evento_nome=album.evento.nome if album.evento else None,
+                evento_data=album.evento.data_evento if album.evento else None,
+                comunidade_nome=album.comunidade.nome if album.comunidade else None,
+                created_by_nome=_profile_display_name(_profile_for(album.created_by)),
+                created_at=album.created_at,
+                fotos=[
+                    GaleriaFotoPublicRead(
+                        id=foto.id,
+                        url=foto.url,
+                        legenda=foto.legenda,
+                        ordem=foto.ordem,
+                        uploaded_by_nome=_profile_display_name(_profile_for(foto.uploaded_by)),
+                        created_at=foto.created_at,
+                    )
+                    for foto in sorted(album.fotos, key=lambda f: (f.ordem, f.created_at))
+                ],
+            )
+            for album in albums
+        ]
 
     async def get_album_by_id(self, album_id: uuid.UUID) -> GaleriaAlbum:
         album = await self.repo.get_album(album_id)
