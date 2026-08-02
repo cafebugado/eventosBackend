@@ -66,6 +66,38 @@ async def test_set_and_get_event_tags(client: AsyncClient, db_session: AsyncSess
     assert len(response.json()) == 1
 
 
+async def test_get_all_event_tags_map_is_public(client: AsyncClient, db_session: AsyncSession):
+    token, user_id = make_token()
+    await set_user_role(db_session, user_id, Role.MODERADOR)
+
+    tag_resp = await client.post("/tags", json={"nome": "Python"}, headers=auth_headers(token))
+    tag_id = tag_resp.json()["id"]
+
+    event_payload = {
+        "nome": "Evento Tags Map",
+        "data_evento": "25/12/2026",
+        "horario": "19:00",
+        "dia_semana": "Sexta",
+        "link": "https://example.com",
+        "status": "publicado",
+    }
+    event_resp = await client.post("/events", json=event_payload, headers=auth_headers(token))
+    event_id = event_resp.json()["id"]
+
+    await client.put(
+        f"/events/{event_id}/tags", json={"tag_ids": [tag_id]}, headers=auth_headers(token)
+    )
+
+    # Sem header de auth — a rota e publica, mas um bug de ordem de rotas
+    # (events.router registrado antes de tags.router em app/main.py) fazia o
+    # FastAPI casar isso com GET /events/{event_id} antes de chegar aqui,
+    # retornando 401 em vez de servir o mapa de tags.
+    response = await client.get("/events/tags-map")
+    assert response.status_code == 200
+    body = response.json()
+    assert body[event_id][0]["nome"] == "Python"
+
+
 async def test_participant_can_set_tags_only_on_own_event(client: AsyncClient, db_session: AsyncSession):
     moderator_token, moderator_id = make_token(email="moderador@example.com")
     participant_token, participant_id = make_token(email="participante@example.com")
