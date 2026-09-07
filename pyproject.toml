@@ -35,6 +35,8 @@ dev = [
     "ruff>=0.5.0",
     "mypy>=1.10.0",
     "aiosqlite>=0.20.0",
+    "commitizen>=3.27.0",
+    "pre-commit>=3.7.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -59,3 +61,11 @@ testpaths = ["tests"]
 
 [tool.coverage.report]
 fail_under = 55
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "v$version"
+version_scheme = "pep440"
+version_provider = "pep621"
+version = "0.1.0"
+update_changelog_on_bump = true
