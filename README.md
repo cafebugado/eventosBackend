@@ -167,6 +167,12 @@ Consulte `/docs` (Swagger) apos subir a API. Resumo por dominio:
 | GitHub | `/github/*` | publico, com rate limit (30/min) e cache de 5 min |
 | Meta | `/health`, `/og`, `/sitemap.xml` | publico |
 
+## Contribuindo
+
+Fluxo de branches (`main`/`develop`/`feature`/`fix`/`hotfix`), padrao de commits
+(Conventional Commits via Commitizen) e checklist de Pull Request estao descritos em
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Migracao incremental do frontend
 
 O frontend deve passar a consumir esta API no lugar de `@supabase/supabase-js` para
