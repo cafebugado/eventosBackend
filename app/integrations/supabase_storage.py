@@ -7,7 +7,9 @@ from functools import lru_cache
 from supabase import Client, create_client
 
 from app.core.config import settings
+from app.utils.image import optimize_image
 
+_CACHE_CONTROL_SECONDS = "31536000"
 _PUBLIC_URL_RE = re.compile(r"/storage/v1/object/public/[^/]+/(.+)$")
 
 
@@ -23,10 +25,17 @@ def _build_path(prefix: str, filename: str) -> str:
 
 
 def _upload_file_sync(prefix: str, filename: str, content: bytes, content_type: str | None = None) -> str:
+    optimized = optimize_image(content)
+    if optimized is not None:
+        content, filename, content_type = optimized, "imagem.webp", "image/webp"
+
     client = get_storage_client()
     path = _build_path(prefix, filename)
     bucket = client.storage.from_(settings.SUPABASE_STORAGE_BUCKET)
-    file_options = {"content-type": content_type} if content_type else None
+    # O path e unico por upload, entao o arquivo nunca muda e pode ser cacheado por 1 ano.
+    file_options = {"cache-control": _CACHE_CONTROL_SECONDS}
+    if content_type:
+        file_options["content-type"] = content_type
     bucket.upload(path, content, file_options=file_options)  # type: ignore[arg-type]
     return bucket.get_public_url(path)
 
