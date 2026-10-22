@@ -2,20 +2,13 @@ import asyncio
 import re
 import time
 import uuid
-from functools import lru_cache
-
-from supabase import Client, create_client
 
 from app.core.config import settings
+from app.integrations.supabase_client import get_supabase_client
 from app.utils.image import optimize_image
 
 _CACHE_CONTROL_SECONDS = "31536000"
 _PUBLIC_URL_RE = re.compile(r"/storage/v1/object/public/[^/]+/(.+)$")
-
-
-@lru_cache
-def get_storage_client() -> Client:
-    return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
 
 
 def _build_path(prefix: str, filename: str) -> str:
@@ -29,7 +22,7 @@ def _upload_file_sync(prefix: str, filename: str, content: bytes, content_type: 
     if optimized is not None:
         content, filename, content_type = optimized, "imagem.webp", "image/webp"
 
-    client = get_storage_client()
+    client = get_supabase_client()
     path = _build_path(prefix, filename)
     bucket = client.storage.from_(settings.SUPABASE_STORAGE_BUCKET)
     # O path e unico por upload, entao o arquivo nunca muda e pode ser cacheado por 1 ano.
@@ -46,7 +39,7 @@ async def upload_file(prefix: str, filename: str, content: bytes, content_type: 
 
 
 def _remove_file_sync(path: str) -> None:
-    client = get_storage_client()
+    client = get_supabase_client()
     client.storage.from_(settings.SUPABASE_STORAGE_BUCKET).remove([path])
 
 
