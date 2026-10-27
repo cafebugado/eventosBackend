@@ -1,5 +1,7 @@
 from functools import lru_cache
+from typing import Literal
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +26,12 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
     OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
     OTEL_EXPORTER_OTLP_HEADERS: str = ""
+    SERVICE_NAME: str = "eventos-backend"
+    ENVIRONMENT: Literal["development", "preview", "production"] = Field(
+        default="development",
+        validation_alias=AliasChoices("ENVIRONMENT", "VERCEL_ENV"),
+    )
+    LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
     # OAuth
     OAUTH_REDIRECT_URL: str = ""
