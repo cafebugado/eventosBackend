@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
     OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
     OTEL_EXPORTER_OTLP_HEADERS: str = ""
-    SERVICE_NAME: str = "eventos-backend"
+    SERVICE_NAME: str = "eventos-backend-api"
     ENVIRONMENT: Literal["development", "preview", "production"] = Field(
         default="development",
         validation_alias=AliasChoices("ENVIRONMENT", "VERCEL_ENV"),
