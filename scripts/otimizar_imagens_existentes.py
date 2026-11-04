@@ -19,7 +19,7 @@ from app.integrations.supabase_storage import (
     _CACHE_CONTROL_SECONDS,
     _build_path,
     extract_storage_path,
-    get_storage_client,
+    get_supabase_client,
 )
 from app.utils.image import optimize_image
 
@@ -29,7 +29,7 @@ _STORAGE_MARKER = "%/storage/v1/object/public/%"
 async def main(apply: bool, remover_originais: bool) -> None:
     dsn = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
     conn = await asyncpg.connect(dsn, statement_cache_size=0, timeout=20)
-    bucket = get_storage_client().storage.from_(settings.SUPABASE_STORAGE_BUCKET)
+    bucket = get_supabase_client().storage.from_(settings.SUPABASE_STORAGE_BUCKET)
     antes = depois = 0
     try:
         rows = await conn.fetch(
