@@ -59,7 +59,7 @@ class RequestIdMiddleware:
         sentry_sdk.set_tag("request_id", request_id)
         # Muta o MESMO dict de scope (não copia): é o que `request.state` enxerga, inclusive
         # no handler de 500 e em dependencies síncronas (threadpool).
-        scope.setdefault("state", {})[request_id] = request_id
+        scope.setdefault("state", {})["request_id"] = request_id
 
         started = time.perf_counter()
         status_code = 500 # assumido até alguém enviar http.response.start
