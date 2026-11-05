@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.limiter import limiter
 from app.core.logging import setup_logging
+from app.core.middleware import REQUEST_ID_HEADER, RequestIdMiddleware
 from app.core.telemetry import setup_telemetry
 from app.routers import (
     audit,
@@ -41,7 +42,11 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=[REQUEST_ID_HEADER],
 )
+# Registrado DEPOIS do CORS de propósito: o último add_middleware é o mais externo,
+# então o preflight (OPTIONS) também recebe o X-Request-ID. Não inverter.
+app.add_middleware(RequestIdMiddleware)
 
 register_exception_handlers(app)
 
