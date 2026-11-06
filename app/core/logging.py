@@ -84,11 +84,3 @@ def setup_logging(level: int | str | None = None) -> None:
         uv = logging.getLogger(name)
         uv.handlers.clear()
         uv.propagate = True
-
-    if settings.SENTRY_DSN:
-        try:
-            import sentry_sdk
-
-            sentry_sdk.init(dsn=settings.SENTRY_DSN, traces_sample_rate=0.1)
-        except ImportError:
-            logging.getLogger(__name__).warning("sentry_sdk nao instalado; SENTRY_DSN ignorado")

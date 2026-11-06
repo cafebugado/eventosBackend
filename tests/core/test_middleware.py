@@ -28,7 +28,6 @@ class SimulatedError(Exception):
 def json_logging(capsys, monkeypatch):
     monkeypatch.setattr(settings, "SERVICE_NAME", "svc-teste")
     monkeypatch.setattr(settings, "ENVIRONMENT", "preview")
-    monkeypatch.setattr(settings, "SENTRY_DSN", "")  # impede o init do Sentry no setup_logging
     setup_logging("INFO")
     yield
     root = logging.getLogger()

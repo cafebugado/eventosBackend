@@ -1,9 +1,28 @@
+import logging
 import os
 
 from fastapi import FastAPI
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
+
+def setup_sentry() -> None:
+    if not settings.SENTRY_DSN:
+        return
+
+    try:
+        import sentry_sdk
+    except ImportError:
+        logger.warning("sentry_sdk nao instalado, ignorando setup do Sentry")
+        return
+
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.ENVIRONMENT,
+        traces_sample_rate=0.1,
+    )
 
 def setup_telemetry(app: FastAPI) -> None:
     if not settings.OTEL_EXPORTER_OTLP_ENDPOINT:

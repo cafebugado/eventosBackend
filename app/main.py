@@ -8,7 +8,7 @@ from app.core.exceptions import register_exception_handlers
 from app.core.limiter import limiter
 from app.core.logging import setup_logging
 from app.core.middleware import REQUEST_ID_HEADER, RequestIdMiddleware
-from app.core.telemetry import setup_telemetry
+from app.core.telemetry import setup_sentry, setup_telemetry
 from app.routers import (
     audit,
     auth,
@@ -24,6 +24,7 @@ from app.routers import (
 )
 
 setup_logging()
+setup_sentry()
 
 app = FastAPI(
     title="Backend Eventos",
