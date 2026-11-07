@@ -79,8 +79,14 @@ def setup_logging(level: int | str | None = None) -> None:
     root.addHandler(handler)
     root.setLevel(log_level)
 
-    # uvicorn.access continua propagando até o middleware existir.
-    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    # uvicorn.access fica silenciado: o http.request.completed (middleware)
+    # é a única linha de acesso, com request_id, status_code e duration_ms.
+    for name in ("uvicorn", "uvicorn.error"):
         uv = logging.getLogger(name)
         uv.handlers.clear()
         uv.propagate = True
+
+    access = logging.getLogger("uvicorn.access")
+    access.handlers.clear()
+    access.addHandler(logging.NullHandler())
+    access.propagate = False
