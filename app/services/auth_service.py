@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.core.exceptions import AppError, ConflictError, UnauthorizedError, ValidationAppError
 from app.core.security import CurrentUser
 from app.integrations.supabase_auth_client import sign_in_with_password
-from app.integrations.supabase_storage import get_storage_client
+from app.integrations.supabase_storage import get_supabase_client
 from app.rbac.roles import DEFAULT_ROLE, Role
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import (
@@ -56,7 +56,7 @@ class AuthService:
         )
 
     async def register(self, data: RegisterRequest) -> RegisterResponse:
-        client = get_storage_client()
+        client = get_supabase_client()
 
         github_username = normalize_github(data.github)
         linkedin_username = normalize_linkedin(data.linkedin)
@@ -135,7 +135,7 @@ class AuthService:
         if provider not in _OAUTH_PROVIDERS:
             raise ValidationAppError(f"Provider '{provider}' nao suportado. Use: github, google")
 
-        client = get_storage_client()
+        client = get_supabase_client()
         payload: SignInWithOAuthCredentials = {"provider": provider}  # type: ignore[typeddict-item]
         if settings.OAUTH_REDIRECT_URL:
             payload["options"] = {"redirect_to": settings.OAUTH_REDIRECT_URL}
@@ -143,7 +143,7 @@ class AuthService:
         return result.url
 
     async def oauth_callback(self, data: OAuthCallbackRequest) -> LoginResponse:
-        client = get_storage_client()
+        client = get_supabase_client()
         params: CodeExchangeParams = {
             "auth_code": data.code,
             "code_verifier": "",
@@ -215,7 +215,7 @@ class AuthService:
         if not current_user.email:
             raise ValidationAppError("Usuario sem email cadastrado")
 
-        client = get_storage_client()
+        client = get_supabase_client()
         try:
             await asyncio.to_thread(
                 client.auth.sign_in_with_password,
@@ -231,7 +231,7 @@ class AuthService:
         )
 
     async def request_password_reset(self, email: str) -> None:
-        client = get_storage_client()
+        client = get_supabase_client()
         try:
             await asyncio.to_thread(client.auth.reset_password_for_email, email)
         except AuthApiError:
