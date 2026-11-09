@@ -1,6 +1,6 @@
 # Integração GitHub → Discord
 
-Notificações da equipe **Eventos Backend** no Discord do Café Bugado.
+Notificações da equipe **Eventos Backend Admin** no Discord do Café Bugado.
 Só observa eventos: não roda código de PR, não altera o repositório e nunca bloqueia merge
 (se o Discord falhar, o job termina com um aviso, não com erro).
 

@@ -1,4 +1,4 @@
-// Integração GitHub → Discord da equipe "Eventos Backend".
+// Integração GitHub → Discord da equipe "Eventos Backend Admin".
 //
 //   node .github/discord/notify.mjs          → trata o evento do workflow (GITHUB_EVENT_NAME)
 //   node .github/discord/notify.mjs health   → verifica /health de produção e desenvolvimento
@@ -517,7 +517,7 @@ async function weekly() {
     username: 'GitHub · Resumo',
     avatar_url: AVATAR,
     embeds: [{
-      title: '📊 Resumo semanal · Eventos Backend',
+      title: '📊 Resumo semanal · Eventos Backend Admin',
       url: `https://github.com/${REPO}/pulse`,
       color: COLORS.blurple,
       description: `🟣 **${merged.total_count}** PR(s) com merge · ✅ **${closed.total_count}** issue(s) fechada(s) · 🆕 **${opened.total_count}** issue(s) nova(s) · 🚀 **${prodDeploys}** deploy(s) em produção`,
