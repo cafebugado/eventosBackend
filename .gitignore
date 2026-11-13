@@ -22,3 +22,6 @@ htmlcov/
 
 # Vercel
 .vercel/
+
+# Estado local do monitor de health (GitHub Actions)
+.health-state.json
