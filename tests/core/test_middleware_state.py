@@ -12,12 +12,13 @@ def _build_app() -> FastAPI:
     @app.get("/async")
     async def read_async(request: Request) -> dict[str, str]:
         return {"request_id": request.state.request_id}
-    
+
     @app.get("/sync")
     def read_sync(request: Request) -> dict[str, str]:
         return {"request_id": request.state.request_id}
-    
+
     return app
+
 
 @pytest.mark.parametrize("path", ["/async", "/sync"])
 def test_request_state_expoe_o_mesmo_id_do_header(path: str) -> None:
@@ -25,6 +26,7 @@ def test_request_state_expoe_o_mesmo_id_do_header(path: str) -> None:
     response = client.get(path)
     assert response.status_code == 200
     assert response.json()["request_id"] == response.headers[REQUEST_ID_HEADER]
+
 
 def test_request_state_usa_o_id_valido_enviado_pelo_client() -> None:
     client = TestClient(_build_app())

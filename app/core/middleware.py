@@ -24,18 +24,15 @@ def _resolve_request_id(scope: Scope) -> str:
                 return candidate
             break
     return str(uuid.uuid4())
-    
 
 
 class RequestIdMiddleware:
     # Middleware ASGI puro: request id, contexto de log e o log `http.request.completed`.
-    # Limitação conhecida (provada em spike):
-    # um erro NÃO tratado vira resposta 500 no `ServerErrorMiddleware`,
-    # Essa resposta não passa pelo nosso `send`,
-    # então sai sem `X-Request-ID` (e sem headers de CORS).
-    # O `request_id` continua no log e na tag do Sentry.
-    # O header desse caso é tratado no handler de `Exception` (app/core/exceptions.py),
-    # lendo `request.state.request_id`.
+    # Limitação conhecida: um erro NÃO tratado vira resposta 500 no
+    # ServerErrorMiddleware, que fica por fora deste middleware. Essa resposta
+    # não passa pelo nosso send, então sai sem X-Request-ID (e sem headers de CORS).
+    # O request_id continua no log e na tag do Sentry. A correção está registrada
+    # como follow-up em docs/OBSERVABILIDADE.md.
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -47,14 +44,14 @@ class RequestIdMiddleware:
             return
 
         request_id = _resolve_request_id(scope)
-        
+
         # clear no INÍCIO (e não no fim): o log de erro do servidor, emitido depois que a
         # exceção atravessa este middleware, ainda herda o request_id.
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(
             request_id=request_id,
             method=scope["method"],
-            path=scope["path"], # sem query string, para não poluir o log com dados sensíveis
+            path=scope["path"],  # sem query string, para não poluir o log com dados sensíveis
         )
         sentry_sdk.set_tag("request_id", request_id)
         # Muta o MESMO dict de scope (não copia): é o que `request.state` enxerga, inclusive
@@ -62,7 +59,7 @@ class RequestIdMiddleware:
         scope.setdefault("state", {})["request_id"] = request_id
 
         started = time.perf_counter()
-        status_code = 500 # assumido até alguém enviar http.response.start
+        status_code = 500  # assumido até alguém enviar http.response.start
         logged = False
 
         def log_completed() -> None:
@@ -97,14 +94,13 @@ class RequestIdMiddleware:
             await send(message)
             if is_last_body:
                 log_completed()
-            
+
         try:
             await self.app(scope, receive, send_with_request_id)
-            
+
         finally:
             # Cobre o 500 não tratado, em que a resposta sai por fora do nosso send,
             # e o cliente que desconecta.
             # Nesse caminho o status 500 é ASSUMIDO
             # (o handler do projeto devolve 500), não observado.
             log_completed()
-                

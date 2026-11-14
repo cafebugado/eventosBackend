@@ -33,6 +33,7 @@ def _add_static_fields(_: WrappedLogger, __: str, event_dict: EventDict) -> Even
     event_dict.setdefault("environment", settings.ENVIRONMENT)
     return event_dict
 
+
 def setup_logging(level: int | str | None = None) -> None:
     log_level = level if level is not None else settings.LOG_LEVEL
 
@@ -45,7 +46,7 @@ def setup_logging(level: int | str | None = None) -> None:
         _add_static_fields,
     ]
 
-    # Caminho 1: logs nativos do structlogn mas NÃO renderiza.
+    # Caminho 1: logs nativos do structlog mas NÃO renderiza.
     structlog.configure(
         processors=[
             structlog.stdlib.filter_by_level,

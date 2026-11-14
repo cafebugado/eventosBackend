@@ -5,7 +5,6 @@ import uuid
 from typing import Any
 
 import pytest
-import structlog
 from fastapi import BackgroundTasks, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -13,8 +12,6 @@ from fastapi.testclient import TestClient
 from starlette.types import Receive, Scope, Send
 
 from app.core import middleware as middleware_module
-from app.core.config import settings
-from app.core.logging import HANDLER_NAME, setup_logging
 from app.core.middleware import RequestIdMiddleware
 
 ORIGIN = "http://localhost:5173"
@@ -22,20 +19,6 @@ ORIGIN = "http://localhost:5173"
 
 class SimulatedError(Exception):
     """Erro simulado: existe só nos testes. O código de produção não sabe que é teste."""
-
-
-@pytest.fixture
-def json_logging(capsys, monkeypatch):
-    monkeypatch.setattr(settings, "SERVICE_NAME", "svc-teste")
-    monkeypatch.setattr(settings, "ENVIRONMENT", "preview")
-    setup_logging("INFO")
-    yield
-    root = logging.getLogger()
-    for h in list(root.handlers):
-        if h.get_name() == HANDLER_NAME:
-            root.removeHandler(h)
-    structlog.contextvars.clear_contextvars()
-    structlog.reset_defaults()
 
 
 def _read_logs(capsys) -> list[dict[str, Any]]:
@@ -111,9 +94,7 @@ def _build_app() -> FastAPI:
     return app
 
 
-@pytest.mark.parametrize(
-    ("path", "marker"), [("/ok", "endpoint-async"), ("/ok-sync", "endpoint-sync")]
-)
+@pytest.mark.parametrize(("path", "marker"), [("/ok", "endpoint-async"), ("/ok-sync", "endpoint-sync")])
 def test_logs_carry_the_same_request_id_as_the_response_header(json_logging, capsys, path, marker):
     # Critério de aceite da task.
     with TestClient(_build_app()) as client:
@@ -177,9 +158,7 @@ def test_context_does_not_leak_between_requests(json_logging, capsys):
 def test_preflight_gets_request_id_header(json_logging, capsys):
     # Prova a ordem de registro: o request id é mais externo que o CORS.
     with TestClient(_build_app()) as client:
-        response = client.options(
-            "/ok", headers={"Origin": ORIGIN, "Access-Control-Request-Method": "GET"}
-        )
+        response = client.options("/ok", headers={"Origin": ORIGIN, "Access-Control-Request-Method": "GET"})
 
     assert response.status_code == 200
     (record,) = _completed(_read_logs(capsys))
@@ -230,7 +209,8 @@ def test_duration_is_measured_until_last_body_not_until_background_tasks(json_lo
 
 def test_unhandled_error_logs_completed_once_with_status_500(json_logging, capsys):
     # raise_server_exceptions=False: o Starlette re-levanta a exceção depois do handler de 500.
-    # O header X-Request-ID desse caso é tema do handler de Exception (commit seguinte).
+    # O 500 não tratado sai sem X-Request-ID (limitação conhecida,
+    # ver docs/OBSERVABILIDADE.md).
     with TestClient(_build_app(), raise_server_exceptions=False) as client:
         response = client.get("/boom")
 

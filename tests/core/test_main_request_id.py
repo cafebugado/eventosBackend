@@ -10,6 +10,7 @@ from app.main import app
 
 ORIGIN = settings.cors_origins_list[0]
 
+
 def test_preflight_recebe_request_id() -> None:
     client = TestClient(app)
     response = client.options(
@@ -17,6 +18,7 @@ def test_preflight_recebe_request_id() -> None:
         headers={"Origin": ORIGIN, "Access-Control-Request-Method": "GET"},
     )
     assert REQUEST_ID_HEADER in response.headers
+
 
 def test_429_do_slowapi_recebe_request_id() -> None:
     limiter = Limiter(key_func=get_remote_address)
@@ -29,12 +31,13 @@ def test_429_do_slowapi_recebe_request_id() -> None:
     @limiter.limit("1/minute")
     async def limitada(request: Request) -> dict[str, bool]:
         return {"ok": True}
-    
+
     client = TestClient(mini)
     assert client.get("/limitada").status_code == 200
     response = client.get("/limitada")
     assert response.status_code == 429
     assert REQUEST_ID_HEADER in response.headers
+
 
 def test_404_recebe_request_id_e_expose_headers() -> None:
     client = TestClient(app)
