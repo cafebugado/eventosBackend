@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,10 +23,20 @@ class Settings(BaseSettings):
     GITHUB_REPO_BACKEND: str = "cafebugado/backendEventos"
 
     # Observability
+    @field_validator("LOG_LEVEL", mode="before")
+    @classmethod
+    def _normaliza_log_level(cls, value: object) -> object:
+        return value.strip().upper() if isinstance(value, str) else value
+
+    @field_validator("ENVIRONMENT", mode="before")
+    @classmethod
+    def _normaliza_environment(cls, value: object) -> object:
+        return value.strip().lower() if isinstance(value, str) else value
+
     SENTRY_DSN: str = ""
     OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
     OTEL_EXPORTER_OTLP_HEADERS: str = ""
-    SERVICE_NAME: str = "eventos-backend-api"
+    SERVICE_NAME: str = "backend-eventos"
     ENVIRONMENT: Literal["development", "preview", "production"] = Field(
         default="development",
         validation_alias=AliasChoices("ENVIRONMENT", "VERCEL_ENV"),

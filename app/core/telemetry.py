@@ -24,6 +24,7 @@ def setup_sentry() -> None:
         traces_sample_rate=0.1,
     )
 
+
 def setup_telemetry(app: FastAPI) -> None:
     if not settings.OTEL_EXPORTER_OTLP_ENDPOINT:
         return
@@ -37,7 +38,7 @@ def setup_telemetry(app: FastAPI) -> None:
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-    resource = Resource.create({SERVICE_NAME: "backend-eventos"})
+    resource = Resource.create({SERVICE_NAME: settings.SERVICE_NAME})
     provider = TracerProvider(resource=resource)
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
     trace.set_tracer_provider(provider)
