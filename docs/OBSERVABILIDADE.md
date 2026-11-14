@@ -120,7 +120,7 @@ Exemplo real (saída do app para `GET /docs` com `X-Request-ID: demo-456`). A or
 campos no JSON não é garantida:
 
 ```json
-{"status_code": 200, "duration_ms": 1.0, "event": "http.request.completed", "request_id": "demo-456", "path": "/docs", "method": "GET", "logger": "app.core.middleware", "level": "INFO", "timestamp": "2026-11-07T02:30:28.981746Z", "service": "eventos-backend-api", "environment": "development"}
+{"status_code": 200, "duration_ms": 1.0, "event": "http.request.completed", "request_id": "demo-456", "path": "/docs", "method": "GET", "logger": "app.core.middleware", "level": "INFO", "timestamp": "2026-11-07T02:30:28.981746Z", "service": "backend-eventos", "environment": "development"}
 ```
 
 **Como ver os logs:**
@@ -221,12 +221,6 @@ está lento e por quê.
 3. Cria um `TracerProvider` com `service.name = backend-eventos`, adiciona um
    `BatchSpanProcessor` com o `OTLPSpanExporter` (HTTP) e registra como provider global.
 
-O parâmetro `app` não é usado dentro da função. **A função não chama
-`FastAPIInstrumentor.instrument_app(app)`**: o pacote
-`opentelemetry-instrumentation-fastapi` está nas dependências, mas nenhum código do
-`app/` o invoca. Os spans das rotas vêm do que o FastAPI já emite por conta própria
-(ver [Limitações conhecidas](#limitações-conhecidas) para o que não foi validado).
-
 **O OpenTelemetry não participa da correlação por `request_id`.** O `trace_id` não está
 nos logs; a correlação descrita neste documento é só por `request_id`.
 
@@ -276,7 +270,8 @@ relacionadas a observabilidade:
 | Variável | Para quê serve | Onde obter |
 |---|---|---|
 | `SENTRY_DSN` | Ativa o Sentry (erros) | Projeto Python/FastAPI no sentry.io |
-| `ENVIRONMENT` | Valor do campo `environment` nos logs e no Sentry. Aceita `development`, `preview`, `production`. Padrão: `development`. Também lê `VERCEL_ENV` | Definida por você; na Vercel, `VERCEL_ENV` já vem pronta |
+| `ENVIRONMENT` | Valor do campo `environment` nos logs e no Sentry. Aceita `development`, `preview`, `production`. Valores com maiúsculas/minúsculas diferentes e espaços externos são normalizados. Valores inválidos, como `staging`, ou uma string vazia causam erro de validação na inicialização. Padrão: `development`. Também lê `VERCEL_ENV`. | Definida por você; na Vercel, `VERCEL_ENV` já vem pronta |
+| `SERVICE_NAME` | Nome do serviço utilizado em `service.name` no OpenTelemetry e no campo `service` dos logs JSON. Padrão: `backend-eventos`. | Configuração da aplicação; pode ser sobrescrita pelo `.env` ou ambiente |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Endpoint de destino dos traces | Conexão OTLP no Grafana Cloud |
 | `OTEL_EXPORTER_OTLP_HEADERS` | Header de autenticação do OTLP | Token gerado junto com a conexão OTLP |
 
@@ -314,14 +309,18 @@ ferramenta não é ativada, sem erro e sem necessidade de alterar código.
   `http.request.completed` registra `status_code: 500`.
 - **Ordem dos logs no 500.** No `TestClient`, o `http.request.completed` saiu antes do
   log "Unhandled exception". Foi observado só no `TestClient`, não sob o uvicorn.
-- **OpenTelemetry não validado ponta a ponta.** O FastAPI (a partir da 0.142, segundo a
-  documentação dele) emite traces nativamente e usa os providers globais configurados
-  antes de o app iniciar. Aqui o provider é registrado **depois** de `FastAPI(...)`. Não
-  foi validado que os spans chegam ao Grafana por esse caminho, nem se há exportação em
-  duplicidade (o FastAPI também lê `OTEL_EXPORTER_OTLP_ENDPOINT` do ambiente).
+- **OpenTelemetry validado localmente, mas não em produção/serverless.**
+  Foram observados traces HTTP no Grafana Tempo, incluindo a requisição
+  `POST /auth/register` e o span interno `fastapi.dependencies`.
+  A captura apresentou `service.name = backend-eventos`, status HTTP
+  `422` e duração aproximada de 163 ms.
+  Isso confirma a geração e exportação dos traces no ambiente testado.
+  Ainda não foi validado o comportamento da exportação no runtime
+  serverless da Vercel.
+- **`trace_id` não está nos logs.** Não existe correlação direta
+  entre logs JSON e traces do Grafana nesta implementação.
 - **Serverless não validado.** Não foi validado se logs podem se perder quando o runtime
   da Vercel congela o processo logo após a resposta.
-- **`trace_id` não está nos logs.** Não há correlação log ↔ trace.
 
 ## Follow-ups
 
@@ -329,14 +328,13 @@ Itens identificados e fora do escopo desta task:
 
 - Middleware interno que converta exceções não tratadas em resposta, para o 500 levar
   `X-Request-ID` e CORS.
-- Validar o OpenTelemetry ponta a ponta (spans no Grafana, ordem do provider, exportação
-  duplicada) e decidir o destino do pacote `opentelemetry-instrumentation-fastapi`.
+- Validar a exportação OTLP no ambiente serverless da Vercel, verificar
+  a possibilidade de exportação duplicada e identificar a origem da
+  instrumentação HTTP.
 - Remover o campo `color_message` (códigos ANSI) dos logs do uvicorn.
 - Teste automatizado para `uvicorn.access` silenciado (`propagate is False`).
 - Ruído do Sentry nos testes (`SENTRY_DSN=""` no `conftest` raiz).
 - `StarletteDeprecationWarning` (`httpx` → `httpx2`).
-- Fixture `json_logging` duplicada e `asyncio_default_fixture_loop_scope` não definido
-  no `pytest-asyncio`.
 - Antes de subir o nível do `http.request.completed` para 5xx, validar o comportamento
   do `LoggingIntegration` na documentação do Sentry.
 
