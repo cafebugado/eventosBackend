@@ -61,7 +61,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.coverage.report]
-fail_under = 55
+fail_under = 65
 
 [tool.commitizen]
 name = "cz_conventional_commits"
