@@ -227,7 +227,6 @@ class EventoService:
         stats = await self.repo.count_public_stats()
         return EventoPublicStats(
             total_publicados=stats.get("total", 0),
-            futuros=stats.get("futuros", 0),
             noturno=stats.get("noturno", 0),
             diurno=stats.get("diurno", 0),
         )
@@ -305,22 +304,14 @@ class EventoService:
         today_str = date.today().isoformat()
         today = date.today()
 
-        
         candidates_list = await self.repo.list_upcoming(limit=100, today=today_str)
-        
-        
         candidates_filtered = [e for e in candidates_list if e.id != current_event.id]
         
         if not candidates_filtered:
             return []
 
-        
-        candidate_ids = [e.id for e in candidates_filtered]
-        tags_map = await self.tag_repo.get_tags_for_events(candidate_ids)
-        
-        
-        
-        current_event_tags_dict = await self.tag_repo.get_tags_for_events([current_event.id])
+        tags_map = await self.tag_repo.get_event_tags_map()
+        current_event_tags_dict = await self.tag_repo.get_event_tags_map()
         current_tags = {tag.id for tag in current_event_tags_dict.get(current_event.id, [])}
         current_event_date = parse_event_date(current_event.data_evento)
 
