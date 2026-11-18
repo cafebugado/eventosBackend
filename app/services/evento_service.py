@@ -319,6 +319,7 @@ class EventoService:
         tags_map = await self.tag_repo.get_tags_for_events(candidate_ids)
         
         
+        
         current_event_tags_dict = await self.tag_repo.get_tags_for_events([current_event.id])
         current_tags = {tag.id for tag in current_event_tags_dict.get(current_event.id, [])}
         current_event_date = parse_event_date(current_event.data_evento)
