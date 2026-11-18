@@ -2,7 +2,7 @@ import re
 import uuid
 from datetime import date
 
-from sqlalchemy import Select, case, func, or_, select
+from sqlalchemy import Select, and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.evento import Evento
@@ -260,6 +260,57 @@ class EventoRepository:
         result = await self.db.execute(stmt)
         row = result.one()
         return dict(zip(totals.keys(), row, strict=True))
+
+    async def count_stats(self) -> dict[str, int]:
+        """Calcula estatísticas gerais de todos os eventos diretamente no banco de dados."""
+        totals = {
+            "total": func.count(),
+            "publicados": func.count(case((Evento.status == "publicado", 1))),
+            "rascunhos": func.count(case((Evento.status == "rascunho", 1))),
+            "diurno": func.count(case((Evento.periodo == "Diurno", 1))),
+            "noturno": func.count(case((Evento.periodo == "Noturno", 1))),
+        }
+        stmt = select(*totals.values())
+        result = await self.db.execute(stmt)
+        row = result.one()
+        return dict(zip(totals.keys(), row, strict=True))
+
+    async def count_public_stats(self) -> dict[str, int]:
+        """Calcula estatísticas considerando apenas os eventos com status 'publicado'."""
+        date_key = self._event_date_key()
+        today_key = date.today().isoformat()
+        totals = {
+            "total": func.count(case((Evento.status == "publicado", 1))),
+            "futuros": func.count(case((and_(Evento.status == "publicado", date_key >= today_key), 1))),
+            "diurno": func.count(case((and_(Evento.status == "publicado", Evento.periodo == "Diurno"), 1))),
+            "noturno": func.count(case((and_(Evento.status == "publicado", Evento.periodo == "Noturno"), 1))),
+        }
+        stmt = select(*totals.values())
+        result = await self.db.execute(stmt)
+        row = result.one()
+        return dict(zip(totals.keys(), row, strict=True))
+
+    async def list_published_by_periodo(self, periodo: str) -> list[Evento]:
+        """Retorna eventos publicados filtrados estritamente pelo período (Diurno/Noturno) no SQL."""
+        stmt = (
+            select(Evento)
+            .where(Evento.status == "publicado", Evento.periodo == periodo)
+            .order_by(Evento.created_at.desc())
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_upcoming(self, limit: int, today: str) -> list[Evento]:
+        """Retorna os próximos eventos publicados a partir de hoje ordenados por data e horário no SQL."""
+        date_key = self._event_date_key()
+        stmt = (
+            select(Evento)
+            .where(Evento.status == "publicado", date_key >= today)
+            .order_by(date_key.asc(), Evento.horario.asc())
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
 
     async def list_by_status(self, status: str, limit: int | None = None, offset: int = 0) -> list[Evento]:
         stmt = select(Evento).where(Evento.status == status).order_by(Evento.created_at.desc())

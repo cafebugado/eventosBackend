@@ -216,35 +216,20 @@ class EventoService:
         return [e for e in published if e.periodo == periodo]
 
     async def get_upcoming_events(self, limit: int = 5) -> list[Evento]:
-        published = await self.repo.list_by_status("publicado")
-        today = date.today()
-
-        upcoming = []
-        for evento in published:
-            event_date = parse_event_date(evento.data_evento)
-            if event_date is not None and event_date >= today:
-                upcoming.append((event_date, evento))
-
-        upcoming.sort(key=lambda item: (item[0], parse_event_time(item[1].horario)))
-        return [evento for _, evento in upcoming[:limit]]
+        today_str = date.today().isoformat()
+        return await self.repo.list_upcoming(limit=limit, today=today_str)
 
     async def get_event_stats(self) -> EventoStats:
-        eventos = await self.repo.list_all()
-        return EventoStats(
-            total=len(eventos),
-            publicados=sum(1 for e in eventos if e.status == "publicado"),
-            rascunhos=sum(1 for e in eventos if e.status == "rascunho"),
-            noturno=sum(1 for e in eventos if e.periodo == "Noturno"),
-            diurno=sum(1 for e in eventos if e.periodo == "Diurno"),
-        )
+        stats = await self.repo.count_stats()
+        return EventoStats(**stats)
 
     async def get_public_event_stats(self) -> EventoPublicStats:
-        eventos = await self.repo.list_all()
-        publicados = [e for e in eventos if e.status == "publicado"]
+        stats = await self.repo.count_public_stats()
         return EventoPublicStats(
-            total_publicados=len(publicados),
-            noturno=sum(1 for e in publicados if e.periodo == "Noturno"),
-            diurno=sum(1 for e in publicados if e.periodo == "Diurno"),
+            total_publicados=stats.get("total", 0),
+            futuros=stats.get("futuros", 0),
+            noturno=stats.get("noturno", 0),
+            diurno=stats.get("diurno", 0),
         )
 
     async def get_event_metrics(
@@ -317,22 +302,33 @@ class EventoService:
 
     async def get_recommended_events(self, event_id: uuid.UUID, limit: int = 3) -> list[EventoWithTags]:
         current_event = await self.get_event_by_id(event_id)
+        today_str = date.today().isoformat()
         today = date.today()
 
-        published = await self.repo.list_by_status("publicado")
-        tags_map = await self.tag_repo.get_event_tags_map()
+        
+        candidates_list = await self.repo.list_upcoming(limit=100, today=today_str)
+        
+        
+        candidates_filtered = [e for e in candidates_list if e.id != current_event.id]
+        
+        if not candidates_filtered:
+            return []
 
-        current_tags = {tag.id for tag in tags_map.get(current_event.id, [])}
+        
+        candidate_ids = [e.id for e in candidates_filtered]
+        tags_map = await self.tag_repo.get_tags_for_events(candidate_ids)
+        
+        
+        current_event_tags_dict = await self.tag_repo.get_tags_for_events([current_event.id])
+        current_tags = {tag.id for tag in current_event_tags_dict.get(current_event.id, [])}
         current_event_date = parse_event_date(current_event.data_evento)
 
-        candidates = []
-        for evento in published:
-            if evento.id == current_event.id:
-                continue
+        scored_candidates = []
+        for evento in candidates_filtered:
             event_date = parse_event_date(evento.data_evento)
-            if event_date is None or event_date < today:
+            if event_date is None:
                 continue
-            candidates.append((evento, event_date))
+            scored_candidates.append((evento, event_date))
 
         def sort_key(item: tuple[Evento, date]) -> tuple[bool, bool, int]:
             evento, event_date = item
@@ -348,10 +344,10 @@ class EventoService:
             days_away = (event_date - today).days
             return (not has_tag_match, not same_week, days_away)
 
-        candidates.sort(key=sort_key)
+        scored_candidates.sort(key=sort_key)
 
         results = []
-        for evento, _ in candidates[:limit]:
+        for evento, _ in scored_candidates[:limit]:
             evento_dict = {c.name: getattr(evento, c.name) for c in evento.__table__.columns}
             evento_dict["tags"] = tags_map.get(evento.id, [])
             results.append(EventoWithTags.model_validate(evento_dict))
