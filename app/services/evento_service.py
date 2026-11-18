@@ -27,7 +27,7 @@ from app.schemas.evento import (
     StatusCount,
     TagCount,
 )
-from app.utils.event_date import get_iso_week, get_iso_year, parse_event_date, parse_event_time
+from app.utils.event_date import get_iso_week, get_iso_year, parse_event_date
 from app.utils.slug import generate_slug, resolve_unique_slug
 
 REVIEW_ROLES = {Role.SUPER_ADMIN, Role.ADMIN}
