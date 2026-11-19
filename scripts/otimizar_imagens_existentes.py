@@ -11,9 +11,9 @@ em cache continuem funcionando, a menos que --remover-originais seja passado.
 
 import argparse
 import asyncio
-
 import asyncpg
 
+from app.integrations.supabase_client import get_supabase_client
 from app.core.config import settings
 from app.integrations.supabase_storage import (
     _CACHE_CONTROL_SECONDS,
