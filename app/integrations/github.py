@@ -1,9 +1,9 @@
 import time
 
 import httpx
-from fastapi import HTTPException
 
 from app.core.config import settings
+from app.core.exceptions import ExternalServiceError, NotFoundError
 from app.schemas.contribuinte import GitHubUserInfo
 from app.schemas.github import CommitInfo, ContributorInfo, PullRequestInfo, RepoStats
 
@@ -12,16 +12,33 @@ _CACHE_TTL_SECONDS = 5 * 60
 
 _cache: dict[str, tuple[float, object]] = {}
 
+async def _get(
+    client: httpx.AsyncClient,
+    url: str,
+    not_found_message: str | None = None,
+    **kwargs: object,
+) -> httpx.Response:
 
-async def _get(client: httpx.AsyncClient, url: str, **kwargs: object) -> httpx.Response:
-    response = await client.get(url, **kwargs)  # type: ignore[arg-type]
     try:
+        response = await client.get(url, **kwargs)  # type: ignore[arg-type]
         response.raise_for_status()
+
     except httpx.HTTPStatusError as exc:
-        raise HTTPException(
-            status_code=502, detail=f"Falha ao consultar a API do GitHub: {exc.response.status_code}"
+        if exc.response.status_code == 404:
+            if not_found_message:
+                raise NotFoundError(not_found_message) from exc
+
+        raise ExternalServiceError(
+            f"Falha ao consultar a API do GitHub: {exc.response.status_code}"
         ) from exc
+
+    except httpx.RequestError as exc:
+        raise ExternalServiceError(
+            "Falha ao consultar a API do GitHub"
+        ) from exc
+
     return response
+
 
 
 def _cache_get(key: str) -> object | None:
@@ -151,7 +168,12 @@ async def get_top_contributors(repo: str, n: int = 5) -> list[ContributorInfo]:
 
 async def get_user_info(username: str) -> GitHubUserInfo:
     async with httpx.AsyncClient() as client:
-        response = await _get(client, f"{_GITHUB_API}/users/{username}", headers=_headers())
+        response = await _get(
+            client,
+            f"{_GITHUB_API}/users/{username}",
+            headers=_headers(),
+            not_found_message="Usuario do GitHub nao encontrado",
+        )
         data = response.json()
 
     return GitHubUserInfo(

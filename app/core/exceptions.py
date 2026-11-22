@@ -34,6 +34,10 @@ class ForbiddenError(AppError):
     def __init__(self, message: str = "Acesso negado"):
         super().__init__(message, status.HTTP_403_FORBIDDEN)
 
+class ExternalServiceError(AppError):
+    def __init__(self, message: str):
+        super().__init__(message, status.HTTP_502_BAD_GATEWAY)
+
 
 class ValidationAppError(AppError):
     def __init__(self, message: str = "Dados invalidos"):
