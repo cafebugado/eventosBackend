@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.core.exceptions import AppError, ConflictError, UnauthorizedError, ValidationAppError
 from app.core.security import CurrentUser
 from app.integrations.supabase_auth_client import sign_in_with_password
-from app.integrations.supabase_storage import get_supabase_client
+from app.integrations.supabase_client import get_supabase_client
 from app.rbac.roles import DEFAULT_ROLE, Role
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import (
