@@ -54,6 +54,19 @@ class TagRepository:
             mapping.setdefault(evento_id, []).append(tag)
         return mapping
 
+    async def get_tags_for_events(self, evento_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[Tag]]:
+        if not evento_ids:
+            return {}
+        result = await self.db.execute(
+            select(EventoTag.evento_id, Tag)
+            .join(Tag, EventoTag.tag_id == Tag.id)
+            .where(EventoTag.evento_id.in_(evento_ids))
+        )
+        mapping: dict[uuid.UUID, list[Tag]] = {}
+        for evento_id, tag in result.all():
+            mapping.setdefault(evento_id, []).append(tag)
+        return mapping
+
     async def get_top_tags(
         self, *, limit: int = 10, date_from: str | None = None, date_to: str | None = None
     ) -> list[tuple[uuid.UUID, str, str, int]]:

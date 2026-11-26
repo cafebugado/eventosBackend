@@ -276,12 +276,8 @@ class EventoRepository:
         return dict(zip(totals.keys(), row, strict=True))
 
     async def count_public_stats(self) -> dict[str, int]:
-        """Calcula estatísticas considerando apenas os eventos com status 'publicado'."""
-        date_key = self._event_date_key()
-        today_key = date.today().isoformat()
         totals = {
             "total": func.count(case((Evento.status == "publicado", 1))),
-            "futuros": func.count(case((and_(Evento.status == "publicado", date_key >= today_key), 1))),
             "diurno": func.count(case((and_(Evento.status == "publicado", Evento.periodo == "Diurno"), 1))),
             "noturno": func.count(case((and_(Evento.status == "publicado", Evento.periodo == "Noturno"), 1))),
         }

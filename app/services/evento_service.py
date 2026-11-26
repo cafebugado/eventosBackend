@@ -212,8 +212,7 @@ class EventoService:
         return await self.repo.update(evento)
 
     async def get_events_by_period(self, periodo: str) -> list[Evento]:
-        published = await self.repo.list_by_status("publicado")
-        return [e for e in published if e.periodo == periodo]
+        return await self.repo.list_published_by_periodo(periodo)
 
     async def get_upcoming_events(self, limit: int = 5) -> list[Evento]:
         today_str = date.today().isoformat()
@@ -226,9 +225,9 @@ class EventoService:
     async def get_public_event_stats(self) -> EventoPublicStats:
         stats = await self.repo.count_public_stats()
         return EventoPublicStats(
-            total_publicados=stats.get("total", 0),
-            noturno=stats.get("noturno", 0),
-            diurno=stats.get("diurno", 0),
+            total_publicados=stats["total"],
+            noturno=stats["noturno"],
+            diurno=stats["diurno"],
         )
 
     async def get_event_metrics(
@@ -301,26 +300,26 @@ class EventoService:
 
     async def get_recommended_events(self, event_id: uuid.UUID, limit: int = 3) -> list[EventoWithTags]:
         current_event = await self.get_event_by_id(event_id)
-        today_str = date.today().isoformat()
         today = date.today()
+        today_str = today.isoformat()
 
         candidates_list = await self.repo.list_upcoming(limit=100, today=today_str)
         candidates_filtered = [e for e in candidates_list if e.id != current_event.id]
-        
+
         if not candidates_filtered:
             return []
 
-        tags_map = await self.tag_repo.get_event_tags_map()
-        current_event_tags_dict = await self.tag_repo.get_event_tags_map()
-        current_tags = {tag.id for tag in current_event_tags_dict.get(current_event.id, [])}
+        tags_map = await self.tag_repo.get_tags_for_events(
+            [current_event.id, *(e.id for e in candidates_filtered)]
+        )
+        current_tags = {tag.id for tag in tags_map.get(current_event.id, [])}
         current_event_date = parse_event_date(current_event.data_evento)
 
-        scored_candidates = []
-        for evento in candidates_filtered:
-            event_date = parse_event_date(evento.data_evento)
-            if event_date is None:
-                continue
-            scored_candidates.append((evento, event_date))
+        scored_candidates: list[tuple[Evento, date]] = [
+            (evento, parsed_date)
+            for evento in candidates_filtered
+            if (parsed_date := parse_event_date(evento.data_evento)) is not None
+        ]
 
         def sort_key(item: tuple[Evento, date]) -> tuple[bool, bool, int]:
             evento, event_date = item
