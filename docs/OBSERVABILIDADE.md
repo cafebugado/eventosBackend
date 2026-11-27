@@ -1,20 +1,25 @@
 # Observabilidade
 
 Este documento explica a stack de observabilidade do backend: o que cada ferramenta
-faz, onde o codigo de integracao fica, como configurar do zero e como verificar que
-cada peca esta funcionando.
+faz, onde o código de integração fica, como configurar do zero, como correlacionar
+log, resposta HTTP e Sentry pelo `request_id`, e o que ainda não está coberto.
 
-> Nenhum DSN, token ou ID real aparece neste documento. Onde for necessario um valor
-> de configuracao, use `.env.example` como referencia e gere as suas proprias
+> Nenhum DSN, token ou ID real aparece neste documento. Onde for necessário um valor
+> de configuração, use `.env.example` como referência e gere as suas próprias
 > credenciais nos passos descritos abaixo.
+
+> Regra deste documento: ele só afirma o que está implementado. O que está pendente ou
+> não foi validado aparece em [Limitações conhecidas](#limitações-conhecidas) e em
+> [Follow-ups](#follow-ups).
 
 ## Visao geral
 
 | Necessidade | Ferramenta | O que resolve |
 |---|---|---|
-| Erros em produção | **Sentry** | Captura excecoes nao tratadas com stack trace, contexto da requisicao e agrupamento automatico de issues |
-| Logs | **structlog** | Logs em JSON estruturado (em vez de texto livre), facil de filtrar/buscar |
-| Performance e tracing distribuido | **OpenTelemetry → Grafana Cloud** | Latencia por endpoint, volume de chamadas, rastreio de uma requisicao ponta a ponta |
+| Erros em produção | **Sentry** | Captura exceções não tratadas e logs de nível ERROR, com stack trace, contexto da requisição e agrupamento automático de issues |
+| Logs | **structlog** | Logs em JSON estruturado (em vez de texto livre), fáceis de filtrar e buscar |
+| Correlação | **`X-Request-ID`** | O mesmo `request_id` no header da resposta, em todo log da requisição e na tag do Sentry |
+| Performance e tracing distribuído | **OpenTelemetry → Grafana Cloud** | Latência por endpoint, volume de chamadas, rastreio de uma requisição ponta a ponta |
 | Disponibilidade | **`/health`** | Endpoint simples para checagem externa (uptime monitors) |
 
 Todas as ferramentas sao open source (ou rodam sobre software open source com tier
@@ -25,18 +30,152 @@ um processo de longa duracao no ar para ser "raspado" (scrape) por ferramentas c
 Prometheus tradicional — por isso essas 3 ferramentas foram escolhidas especificamente
 por serem compativeis com esse modelo.
 
+Ordem de inicialização em [app/main.py](../app/main.py):
+
+1. `setup_logging()`
+2. `setup_sentry()`
+3. `FastAPI(...)`
+4. `setup_telemetry(app)` (OpenTelemetry, independente do Sentry)
+
+## Request ID e correlação
+
+**O que é:** cada requisição recebe um identificador (`request_id`). O mesmo valor sai
+no header `X-Request-ID` da resposta, em todos os logs emitidos durante a requisição e
+na tag `request_id` do Sentry. Com ele, a partir de uma resposta (ou de um print de
+erro do front) é possível achar os logs e o evento do Sentry daquela requisição.
+
+**Onde fica o código:** `RequestIdMiddleware` em [app/core/middleware.py](../app/core/middleware.py),
+registrado em [app/main.py](../app/main.py).
+
+**Regras do ID:**
+- Se o cliente envia `X-Request-ID` e o valor faz `fullmatch` em `[A-Za-z0-9._-]{1,128}`,
+  o valor é reaproveitado. Caso contrário, é gerado um `uuid4`.
+- O ID é decidido **uma única vez**, no middleware.
+- Se um endpoint colocar seu próprio `X-Request-ID` na resposta, o header é removido e
+  substituído pelo do middleware (nunca sai duplicado).
+- O valor também fica em `request.state.request_id`, em endpoints `async` e `sync`.
+- Preflight (`OPTIONS`), 404, 422 e 429 também recebem o header.
+
+**Como o contexto é propagado:**
+- Middleware ASGI puro (não usa `BaseHTTPMiddleware`).
+- No **início** de cada requisição, o middleware chama `clear_contextvars()` e vincula
+  `request_id`, `method` e `path` às contextvars do structlog. A limpeza é no início
+  (e não no fim) para que um log de erro emitido depois ainda herde o `request_id`.
+- No Sentry, o middleware chama `sentry_sdk.set_tag("request_id", ...)`.
+
+### Ordem dos middlewares e CORS
+
+`app.user_middleware == ['RequestIdMiddleware', 'CORSMiddleware']`.
+
+No Starlette, o **último** `add_middleware` é o mais **externo**. Aqui o
+`RequestIdMiddleware` é registrado depois do CORS no código, então, na **execução**, ele
+roda antes do CORS. Foi isso que a issue pediu ("antes do CORS" = ordem de execução).
+
+O CORS usa `expose_headers=["X-Request-ID"]`. Sem isso o navegador não deixa o
+JavaScript do front ler o header da resposta. Todas as respostas CORS levam
+`Vary: Origin`.
+
+### Como correlacionar log ↔ header ↔ Sentry
+
+1. Pegue o `X-Request-ID` da resposta (ou do print do erro).
+2. **Logs:** filtre o campo `request_id` com esse valor. Aparecem o `http.request.completed`
+   e qualquer outro log emitido durante a requisição.
+3. **Sentry:** busque pela tag `request_id:<valor>`. Logs de nível INFO da requisição
+   chegam como breadcrumbs do evento; logs ERROR e exceções não tratadas viram eventos.
+
+## Logs estruturados (structlog)
+
+**O que é:** em vez de logs em texto livre, os logs saem em JSON. Isso facilita filtrar
+e buscar logs em ferramentas de agregação. O handler do logging da stdlib usa o
+`ProcessorFormatter` do structlog, então logs da stdlib (por exemplo `uvicorn.error`) e
+logs do structlog saem no mesmo formato.
+
+**Onde fica o código:** [app/core/logging.py](../app/core/logging.py), função
+`setup_logging()`.
+
+### Contrato de campos
+
+| Quando | Campos |
+|---|---|
+| Sempre | `timestamp` (ISO 8601, UTC), `level` (maiúsculo), `event`, `logger`, `service`, `environment` |
+| Se houver exceção | `exception` (traceback) |
+| Via middleware (contextvars) | `request_id`, `method`, `path` |
+| Só no `http.request.completed` | `status_code`, `duration_ms` e, se existir, `user_id` |
+
+### Log de acesso: `http.request.completed`
+
+O middleware emite **um** log por requisição, com `event: "http.request.completed"`:
+
+- Nível `info`, emitido ao enviar o último body da resposta (uma flag evita duplicar).
+- `path` não inclui a query string.
+- `duration_ms` vai do início da requisição até o último body. **Não** espera
+  `BackgroundTask`.
+- `user_id` é opcional e aparece só neste log. É um identificador opaco, nunca dado
+  pessoal. Preencher esse campo (a dependency de auth) não faz parte desta task.
+- O `uvicorn.access` está **silenciado** (`propagate = False` com `NullHandler`). O
+  `http.request.completed` é a única linha de acesso. Os loggers `uvicorn` e
+  `uvicorn.error` continuam propagando (startup e erros do servidor).
+
+Exemplo real (saída do app para `GET /docs` com `X-Request-ID: demo-456`). A ordem dos
+campos no JSON não é garantida:
+
+```json
+{"status_code": 200, "duration_ms": 1.0, "event": "http.request.completed", "request_id": "demo-456", "path": "/docs", "method": "GET", "logger": "app.core.middleware", "level": "INFO", "timestamp": "2026-11-07T02:30:28.981746Z", "service": "backend-eventos", "environment": "development"}
+```
+
+**Como ver os logs:**
+- Localmente: aparecem na saída do processo (terminal do `uvicorn`, ou
+  `docker compose logs api --no-log-prefix`).
+- Em produção: `vercel logs <nome-do-projeto>` (CLI da Vercel) ou a aba "Logs" no
+  dashboard do projeto na Vercel.
+
+**Como adicionar um log novo em qualquer lugar do código:**
+
+Em qualquer módulo de `app/` (router, service, repository), basta criar o logger e usá-lo.
+Não é preciso configurar nada no arquivo: a configuração do JSON e dos campos fixos é
+global e acontece uma vez, em `setup_logging()`, na subida do app.
+
+```python
+import structlog
+
+logger = structlog.get_logger(__name__)
+
+# Exemplo ilustrativo: `evento` e `user_id` precisam existir no escopo onde você loga,
+# por exemplo dentro de um service que recebeu o evento e o usuário.
+logger.info("evento_criado", evento_id=evento.id, criado_por=user_id)
+```
+
+Os pares chave-valor (`evento_id`, `criado_por`) entram como campos no JSON, junto com os
+campos fixos do contrato (`timestamp`, `level`, `event`, `logger`, `service`,
+`environment`). O valor de `__name__` vira o campo `logger`, por exemplo
+`app.services.evento_service`.
+
+Dentro de uma requisição, `request_id`, `method` e `path` entram sozinhos, pelas
+contextvars que o `RequestIdMiddleware` vincula no início da requisição. Não passe esses
+campos na chamada do log.
+
+Fora de uma requisição (por exemplo, no startup do app), não há contexto vinculado, então
+o log sai sem `request_id`, `method` e `path`.
+
+O campo `user_id` do contrato é diferente dos campos livres do exemplo: ele só aparece no
+`http.request.completed`, e só quando a requisição fornece o identificador. Para campos
+próprios, use nomes que não colidam com os do contrato.
+
 ## Sentry (rastreamento de erros)
 
 **O que é:** ferramenta que captura excecoes automaticamente, mostra o stack trace
 completo, o contexto da requisicao que falhou, e agrupa erros parecidos na mesma
 "issue" para nao gerar ruido repetido.
 
-**Onde fica o codigo:**
-- Inicializacao: [app/core/logging.py](../app/core/logging.py) — dentro de
-  `setup_logging()`, se `settings.SENTRY_DSN` estiver preenchido, chama
-  `sentry_sdk.init(...)`.
-- Configuracao: `SENTRY_DSN` em [app/core/config.py](../app/core/config.py).
-- Chamado na inicializacao da app em [app/main.py](../app/main.py) (`setup_logging()`).
+**Onde fica o código:**
+- Inicialização: `setup_sentry()` em [app/core/telemetry.py](../app/core/telemetry.py),
+  chamada em [app/main.py](../app/main.py) antes de `FastAPI(...)`.
+- Configuração: `SENTRY_DSN` e `ENVIRONMENT` em [app/core/config.py](../app/core/config.py).
+
+**O que `setup_sentry()` faz:**
+- Sem `SENTRY_DSN`, não inicializa (nenhuma mudança de comportamento, nenhum erro).
+- Se o `sentry_sdk` não estiver instalado, registra um aviso e segue.
+- Inicializa com `environment=settings.ENVIRONMENT` e `traces_sample_rate=0.1`.
 
 **Como configurar:**
 1. Crie uma conta gratuita em [sentry.io](https://sentry.io).
@@ -45,66 +184,45 @@ completo, o contexto da requisicao que falhou, e agrupa erros parecidos na mesma
 4. Localmente: cole em `SENTRY_DSN=` no seu `.env` (nunca commite esse arquivo).
 5. Em produção (Vercel): Settings → Environment Variables → adicione `SENTRY_DSN` com
    o mesmo valor, marcando o ambiente "Production".
-6. Sem essa variável preenchida, o Sentry simplesmente não é inicializado — nenhuma
-   mudança de comportamento, nenhum erro.
+6. `ENVIRONMENT` aceita `development`, `preview` ou `production` (padrão:
+   `development`). Também é lido de `VERCEL_ENV`, que a Vercel define.
 
 **Como verificar que está funcionando:**
-1. Rode a API localmente (`uvicorn app.main:app --reload`) com `SENTRY_DSN` preenchido.
-2. Force uma excecao (ex.: chame um endpoint passando um parametro invalido que gere
-   erro 500, ou adicione temporariamente um `raise Exception("teste sentry")` em
-   qualquer rota).
-3. No painel do Sentry, abra o projeto do backend → menu **"Issues"** → o erro deve
-   aparecer em poucos segundos, com stack trace completo.
+1. Rode a API com `SENTRY_DSN` preenchido.
+2. Force uma exceção (por exemplo, adicione temporariamente um `raise Exception("teste sentry")`
+   em uma rota).
+3. No painel do Sentry, abra o projeto → **Issues**: o erro deve aparecer em poucos
+   segundos, com stack trace e a tag `environment` igual ao valor de `ENVIRONMENT`.
+   Esse `environment` foi conferido no painel com `development`. A tag `request_id`
+   também foi conferida no painel, no evento de um 500 não tratado (campo **Tags**), e
+   o `request_id` aparece nos breadcrumbs desse evento.
 
-**Taxa de amostragem:** `traces_sample_rate=0.1` (10% das requisicoes geram dados de
-performance além dos erros, que são sempre 100% capturados).
+**Taxa de amostragem:** `traces_sample_rate=0.1` (10% das requisições geram dados de
+performance). Por isso a maior parte dos eventos que chegam no Sentry são *transactions*.
+Erros não são amostrados desta forma.
 
-## Logs estruturados (structlog)
-
-**O que é:** em vez de logs em texto livre (`"Usuario X fez login"`), os logs saem em
-JSON (`{"event": "login", "user_id": "X", "level": "info", "timestamp": "..."}`).
-Isso facilita filtrar e buscar logs em ferramentas de agregação, e a Vercel já captura
-qualquer saída no stdout como log da function automaticamente.
-
-**Onde fica o codigo:** [app/core/logging.py](../app/core/logging.py) — função
-`setup_logging()` configura o `structlog` com processors que adicionam nível, timestamp
-em ISO 8601 e renderizam tudo como JSON.
-
-**Como ver os logs:**
-- Localmente: aparecem direto no terminal onde o `uvicorn` está rodando.
-- Em produção: `vercel logs <nome-do-projeto>` (CLI da Vercel) ou pela aba "Logs" no
-  dashboard do projeto na Vercel.
-
-**Como adicionar um log novo em qualquer lugar do código:**
-
-```python
-import structlog
-
-logger = structlog.get_logger(__name__)
-
-logger.info("evento_criado", evento_id=evento.id, usuario_id=user_id)
-```
-
-Os pares chave-valor (`evento_id=...`, `usuario_id=...`) entram automaticamente como
-campos estruturados no JSON final — não precisa formatar string manualmente.
+**O que vira evento:** um `logger.exception` / log de nível ERROR vira evento de erro
+(integração de logging do `sentry-sdk`, `event_level` padrão ERROR), e um 500 não
+tratado gera um evento de exceção.
 
 ## OpenTelemetry + Grafana Cloud (traces e performance)
 
-**O que é:** tracing distribuído. Cada requisição HTTP que chega na API gera um
-"trace" — uma linha do tempo de quanto tempo cada parte da requisição levou (ex.:
-tempo total da rota, tempo gasto na consulta ao banco). Isso permite ver, endpoint por
-endpoint, qual está lento e por quê.
+**O que é:** tracing distribuído. Cada requisição HTTP gera um "trace": uma linha do
+tempo de quanto tempo cada parte levou. Isso permite ver, endpoint por endpoint, qual
+está lento e por quê.
 
-**Onde fica o codigo:** [app/core/telemetry.py](../app/core/telemetry.py) — função
+**Onde fica o código:** [app/core/telemetry.py](../app/core/telemetry.py), função
 `setup_telemetry(app)`, chamada em [app/main.py](../app/main.py) logo após a criação do
 `FastAPI()`. Ela:
 1. Só ativa se `settings.OTEL_EXPORTER_OTLP_ENDPOINT` estiver preenchido (senão, não
-   faz nada — zero overhead).
-2. Exporta as duas variáveis (`OTEL_EXPORTER_OTLP_ENDPOINT`,
-   `OTEL_EXPORTER_OTLP_HEADERS`) para `os.environ`, porque o SDK do OpenTelemetry lê
-   essas variáveis pelo padrão `os.getenv` internamente.
-3. Instrumenta automaticamente todas as rotas do FastAPI via
-   `FastAPIInstrumentor.instrument_app(app)`.
+   faz nada).
+2. Exporta `OTEL_EXPORTER_OTLP_ENDPOINT` e `OTEL_EXPORTER_OTLP_HEADERS` para
+   `os.environ`, porque o SDK do OpenTelemetry lê essas variáveis do ambiente.
+3. Cria um `TracerProvider` com `service.name = backend-eventos`, adiciona um
+   `BatchSpanProcessor` com o `OTLPSpanExporter` (HTTP) e registra como provider global.
+
+**O OpenTelemetry não participa da correlação por `request_id`.** O `trace_id` não está
+nos logs; a correlação descrita neste documento é só por `request_id`.
 
 **Como configurar:**
 1. Crie uma conta gratuita em [grafana.com](https://grafana.com) (Grafana Cloud).
@@ -129,8 +247,7 @@ endpoint, qual está lento e por quê.
 2. Troque o datasource (dropdown no topo) para o que tem "traces" no nome (datasource
    do Tempo, criado junto com a conexão OTLP).
 3. Rode uma query de busca filtrando por **Service Name = `backend-eventos`**.
-4. A tabela de resultados mostra cada requisição recente, com método+rota
-   (`GET /events`, `POST /tags`, etc.) e duração em milissegundos.
+4. A tabela de resultados mostra as requisições recentes, com duração em milissegundos.
 
 ## Health check
 
@@ -153,18 +270,71 @@ relacionadas a observabilidade:
 | Variável | Para quê serve | Onde obter |
 |---|---|---|
 | `SENTRY_DSN` | Ativa o Sentry (erros) | Projeto Python/FastAPI no sentry.io |
+| `ENVIRONMENT` | Valor do campo `environment` nos logs e no Sentry. Aceita `development`, `preview`, `production`. Valores com maiúsculas/minúsculas diferentes e espaços externos são normalizados. Valores inválidos, como `staging`, ou uma string vazia causam erro de validação na inicialização. Padrão: `development`. Também lê `VERCEL_ENV`. | Definida por você; na Vercel, `VERCEL_ENV` já vem pronta |
+| `SERVICE_NAME` | Nome do serviço utilizado em `service.name` no OpenTelemetry e no campo `service` dos logs JSON. Padrão: `backend-eventos`. | Configuração da aplicação; pode ser sobrescrita pelo `.env` ou ambiente |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Endpoint de destino dos traces | Conexão OTLP no Grafana Cloud |
 | `OTEL_EXPORTER_OTLP_HEADERS` | Header de autenticação do OTLP | Token gerado junto com a conexão OTLP |
 
-Se qualquer uma dessas variáveis estiver vazia, a respectiva ferramenta simplesmente
-não é ativada — não há erro, nem necessidade de alterar código.
+Se `SENTRY_DSN` ou `OTEL_EXPORTER_OTLP_ENDPOINT` estiverem vazias, a respectiva
+ferramenta não é ativada, sem erro e sem necessidade de alterar código.
 
 ## Checklist de verificação local
 
 1. Preencha `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT` e `OTEL_EXPORTER_OTLP_HEADERS`
    no seu `.env`.
-2. Rode `uvicorn app.main:app --reload`.
+2. Suba a API (`uvicorn app.main:app --reload` ou `docker compose up -d api`) e espere o
+   servidor aceitar conexões.
 3. Acesse `http://localhost:8000/health` algumas vezes — deve responder `200`.
-4. Force um erro em qualquer rota e confirme que ele aparece em Issues no Sentry.
-5. Volte ao Grafana → Explore → datasource de traces → confirme que aparecem traces
-   com `service.name = backend-eventos`.
+4. Faça uma requisição com ID próprio e confira que o mesmo valor volta no header:
+   `curl -i -H "X-Request-ID: demo-123" http://localhost:8000/docs`
+5. Procure `demo-123` nos logs: deve haver uma linha `http.request.completed` com
+   `"request_id": "demo-123"`, e nenhuma linha do `uvicorn.access`.
+6. Force um erro em qualquer rota e confirme que ele aparece em Issues no Sentry.
+7. Volte ao Grafana → Explore → datasource de traces e confirme se aparecem traces com
+   `service.name = backend-eventos`.
+
+## Limitações conhecidas
+
+- **Erro não tratado (500) sai sem `X-Request-ID` e sem headers CORS.** O handler de
+  `Exception` roda no `ServerErrorMiddleware`, **por fora** dos middlewares de usuário
+  (`RequestIdMiddleware` e `CORSMiddleware`). Em um teste com `TestClient`, comparado
+  a uma rota que responde 200, o 500 voltou sem `x-request-id`,
+  `access-control-expose-headers`, `access-control-allow-credentials` e `vary`. Na
+  prática, quem chama não vê o ID, e o navegador não consegue ler a resposta de um
+  front em outra origem. O `request_id` continua presente no log de erro, no
+  `http.request.completed` e no evento do Sentry. A correção estrutural (middleware
+  interno que converta exceções em resposta) é follow-up.
+- **`duration_ms` não inclui `BackgroundTask`.** O tempo é medido até o último body.
+- **Status 500 assumido.** Se a resposta não passa pelo `send` do middleware, o
+  `http.request.completed` registra `status_code: 500`.
+- **Ordem dos logs no 500.** No `TestClient`, o `http.request.completed` saiu antes do
+  log "Unhandled exception". Foi observado só no `TestClient`, não sob o uvicorn.
+- **OpenTelemetry validado localmente, mas não em produção/serverless.**
+  Foram observados traces HTTP no Grafana Tempo, incluindo a requisição
+  `POST /auth/register` e o span interno `fastapi.dependencies`.
+  A captura apresentou `service.name = backend-eventos`, status HTTP
+  `422` e duração aproximada de 163 ms.
+  Isso confirma a geração e exportação dos traces no ambiente testado.
+  Ainda não foi validado o comportamento da exportação no runtime
+  serverless da Vercel.
+- **`trace_id` não está nos logs.** Não existe correlação direta
+  entre logs JSON e traces do Grafana nesta implementação.
+- **Serverless não validado.** Não foi validado se logs podem se perder quando o runtime
+  da Vercel congela o processo logo após a resposta.
+
+## Follow-ups
+
+Itens identificados e fora do escopo desta task:
+
+- Middleware interno que converta exceções não tratadas em resposta, para o 500 levar
+  `X-Request-ID` e CORS.
+- Validar a exportação OTLP no ambiente serverless da Vercel, verificar
+  a possibilidade de exportação duplicada e identificar a origem da
+  instrumentação HTTP.
+- Remover o campo `color_message` (códigos ANSI) dos logs do uvicorn.
+- Teste automatizado para `uvicorn.access` silenciado (`propagate is False`).
+- Ruído do Sentry nos testes (`SENTRY_DSN=""` no `conftest` raiz).
+- `StarletteDeprecationWarning` (`httpx` → `httpx2`).
+- Antes de subir o nível do `http.request.completed` para 5xx, validar o comportamento
+  do `LoggingIntegration` na documentação do Sentry.
+

@@ -15,11 +15,11 @@ import asyncio
 import asyncpg
 
 from app.core.config import settings
+from app.integrations.supabase_client import get_supabase_client
 from app.integrations.supabase_storage import (
     _CACHE_CONTROL_SECONDS,
     _build_path,
     extract_storage_path,
-    get_supabase_client,
 )
 from app.utils.image import optimize_image
 
