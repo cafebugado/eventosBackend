@@ -1,7 +1,14 @@
+import uuid
+from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_evento_service, get_tag_service
+from app.main import app
 from app.rbac.roles import Role
 from tests.conftest import make_token, set_user_role
 
@@ -134,3 +141,42 @@ async def test_participant_can_set_tags_only_on_own_event(client: AsyncClient, d
         headers=auth_headers(other_token),
     )
     assert other_response.status_code == 403
+
+
+async def test_list_tags_uses_injected_service(client: AsyncClient):
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    fake_tag = SimpleNamespace(id=uuid.uuid4(), nome="Mock", cor="#000000", created_at=now, updated_at=now)
+    tag_service = AsyncMock()
+    tag_service.get_tags.return_value = [fake_tag]
+    app.dependency_overrides[get_tag_service] = lambda: tag_service
+
+    response = await client.get("/tags")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [t["nome"] for t in body] == ["Mock"]
+    assert body[0]["id"] == str(fake_tag.id)
+    tag_service.get_tags.assert_awaited_once_with()
+
+
+async def test_set_event_tags_forbidden_uses_injected_evento_service(
+    client: AsyncClient, db_session: AsyncSession
+):
+    token, user_id = make_token(email="participante@example.com")
+    await set_user_role(db_session, user_id, Role.PARTICIPANTE)
+    event_id = uuid.uuid4()
+
+    evento_service = AsyncMock()
+    evento_service.get_event_by_id.return_value = SimpleNamespace(created_by=uuid.uuid4())
+    tag_service = AsyncMock()
+    app.dependency_overrides[get_evento_service] = lambda: evento_service
+    app.dependency_overrides[get_tag_service] = lambda: tag_service
+
+    response = await client.put(
+        f"/events/{event_id}/tags", json={"tag_ids": []}, headers=auth_headers(token)
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Permissao insuficiente para esta acao"
+    evento_service.get_event_by_id.assert_awaited_once_with(event_id)
+    tag_service.set_event_tags.assert_not_awaited()
