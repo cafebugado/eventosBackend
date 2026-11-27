@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.core import security
+from app.core.limiter import limiter
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
@@ -24,6 +25,11 @@ TEST_PUBLIC_KEY = TEST_PRIVATE_KEY.public_key()
 
 class _FakeSigningKey:
     key = TEST_PUBLIC_KEY
+
+
+@pytest.fixture(autouse=True)
+def _disable_rate_limit(monkeypatch):
+    monkeypatch.setattr(limiter, "enabled", False)
 
 
 @pytest.fixture(autouse=True)
