@@ -1,10 +1,11 @@
 import uuid
 from collections.abc import Awaitable, Callable
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import ForbiddenError
 from app.core.security import CurrentUser, get_current_user
 from app.db.session import get_db
 from app.models.user_role import UserRole
@@ -49,7 +50,7 @@ def require_role(*allowed_roles: Role) -> Callable[..., Awaitable[CurrentUser]]:
     ) -> CurrentUser:
         role = await get_user_role(current_user.id, db)
         if role not in allowed_roles:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Permissao insuficiente para esta acao")
+            raise ForbiddenError("Permissao insuficiente para esta acao")
         return current_user
 
     return dependency
@@ -64,7 +65,7 @@ def require_permission(permission: str) -> Callable[..., Awaitable[CurrentUser]]
     ) -> CurrentUser:
         role = await get_user_role(current_user.id, db)
         if role not in allowed_roles:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Permissao insuficiente para esta acao")
+            raise ForbiddenError("Permissao insuficiente para esta acao")
         return current_user
 
     return dependency

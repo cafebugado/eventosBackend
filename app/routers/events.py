@@ -1,10 +1,11 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import ForbiddenError, NotFoundError
 from app.core.security import CurrentUser, get_optional_user
 from app.db.session import get_db
 from app.models.evento import Evento
@@ -81,8 +82,7 @@ async def _ensure_participant_owns_event(
     service = EventoService(db)
     evento = await service.get_event_by_id(event_id)
     if not _is_event_owner(evento, current_user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Permissao insuficiente para esta acao")
-
+        raise ForbiddenError("Permissao insuficiente para esta acao")
 
 @router.get("", response_model=EventoPage | list[EventoRead])
 async def list_events(
@@ -202,7 +202,7 @@ async def get_event_by_slug_or_id(
     evento = await service.get_event_by_slug_or_id(slug_or_id)
     current_role = await _get_optional_role(current_user, db)
     if not _can_view_event(evento, current_user, current_role):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Evento nao encontrado")
+        raise NotFoundError("Evento nao encontrado")
     return EventoRead.model_validate(evento)
 
 
@@ -216,7 +216,7 @@ async def get_event(
     service = EventoService(db)
     evento = await service.get_event_by_id(event_id)
     if not _can_view_event(evento, current_user, current_role):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Evento nao encontrado")
+        raise NotFoundError("Evento nao encontrado")
     return EventoRead.model_validate(evento)
 
 
